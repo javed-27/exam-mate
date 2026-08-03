@@ -53,7 +53,7 @@ content. Always extract and fetch them so visual context is not lost.
 
 ```bash
 gh issue view <NUMBER> --json body,comments \
-  | python3 .claude/skills/issue-context/scripts/extract-image-urls.py
+  | python3 .opencode/skills/issue-context/scripts/extract-image-urls.py
 ```
 
 If no URLs are printed, skip to Step 3 silently.

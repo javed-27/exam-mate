@@ -66,7 +66,7 @@ Before loading the sub-skill, resolve the story number from the user's input and
 the working directory:
 
 ```bash
-bash .claude/skills/implement-user-story/scripts/setup-story-dir.sh <story_number>
+bash .opencode/skills/implement-user-story/scripts/setup-story-dir.sh <story_number>
 ```
 
 If the directory already exists and contains files (`plan.md`, `tasks.md`, or others),
