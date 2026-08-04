@@ -1,0 +1,26 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.exammate.app-mergeDebugResources-37:/values-night-v8/values-night-v8.xml",
+            "map": [
+                {
+                    "source": "/Users/javedahmed/workspace/exam-mate/app/src/main/res/values-night/themes.xml",
+                    "from": {
+                        "startLines": "1",
+                        "startColumns": "4",
+                        "startOffsets": "16",
+                        "endColumns": "79",
+                        "endOffsets": "91"
+                    },
+                    "to": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "78",
+                        "endOffsets": "129"
+                    }
+                }
+            ]
+        }
+    ]
+}
