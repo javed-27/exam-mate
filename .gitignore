@@ -16,3 +16,6 @@ build/
 
 # opencode plan-mode artifacts
 .opencode/plans/
+
+# story/docs artifacts
+/docs/
