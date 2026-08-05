@@ -16,7 +16,7 @@ fun HomeScreen() {
     ) {
         Text(
             text = "Welcome to Exam Mate",
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.primary,
         )
     }
