@@ -2,7 +2,9 @@ package com.exammate
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.exammate.ui.splash.SPLASH_DURATION_MS
 import org.junit.Rule
@@ -24,9 +26,45 @@ class AppNavigationTest {
     fun splashNavigatesToHome_afterDelay() {
         composeTestRule.onNodeWithText("Exam Mate").assertIsDisplayed()
 
-        composeTestRule.mainClock.advanceTimeBy(SPLASH_DURATION_MS + 500)
-        composeTestRule.waitForIdle()
+        advanceToHome()
 
         composeTestRule.onNodeWithText("AI Study Assistant").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Real-Time MCQ Solver").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Theory Question Solver").assertIsDisplayed()
+    }
+
+    @Test
+    fun mcqCard_navigatesToMcqSolver() {
+        advanceToHome()
+
+        composeTestRule.onNodeWithText("Real-Time MCQ Solver").performClick()
+
+        composeTestRule.onNodeWithText("Real-Time MCQ Solver").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Coming soon").assertIsDisplayed()
+    }
+
+    @Test
+    fun theoryCard_navigatesToTheorySolver() {
+        advanceToHome()
+
+        composeTestRule.onNodeWithText("Theory Question Solver").performClick()
+
+        composeTestRule.onNodeWithText("Theory Question Solver").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Coming soon").assertIsDisplayed()
+    }
+
+    @Test
+    fun backFromPlaceholder_returnsToHome() {
+        advanceToHome()
+
+        composeTestRule.onNodeWithText("Real-Time MCQ Solver").performClick()
+        composeTestRule.onNodeWithContentDescription("Back").performClick()
+
+        composeTestRule.onNodeWithText("AI Study Assistant").assertIsDisplayed()
+    }
+
+    private fun advanceToHome() {
+        composeTestRule.mainClock.advanceTimeBy(SPLASH_DURATION_MS + 500)
+        composeTestRule.waitForIdle()
     }
 }
