@@ -60,6 +60,7 @@ fun McqSolverScreen(
     cameraPermissionStore: CameraPermissionStore? = null,
     screenCaptureRequester: ScreenCaptureRequester? = null,
     initialScreenCaptureGranted: Boolean = false,
+    requestCamera: ((permission: String, onResult: (Boolean) -> Unit) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -75,9 +76,7 @@ fun McqSolverScreen(
     var screenCaptureDenied by remember { mutableStateOf(false) }
     var settingsOpened by remember { mutableStateOf(false) }
 
-    val cameraLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted ->
+    val onCameraResult: (Boolean) -> Unit = { granted ->
         if (granted) {
             cameraGranted = true
             cameraDeniedFlag = false
@@ -86,6 +85,16 @@ fun McqSolverScreen(
             cameraDeniedFlag = true
             effectiveStore.cameraDenied = true
             onBackToHome()
+        }
+    }
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted -> onCameraResult(granted) }
+    val launchCameraRequest: (String) -> Unit = { permission ->
+        if (requestCamera == null) {
+            cameraLauncher.launch(permission)
+        } else {
+            requestCamera(permission, onCameraResult)
         }
     }
 
@@ -194,13 +203,13 @@ fun McqSolverScreen(
                         description = "We need camera access to capture the question on your exam paper in real time.",
                         buttonText = "Allow camera access",
                         granted = false,
-                        onButtonClick = { cameraLauncher.launch(Manifest.permission.CAMERA) },
+                        onButtonClick = { launchCameraRequest(Manifest.permission.CAMERA) },
                     )
                     PermissionAction.SHOW_CAMERA_DENIED -> DeniedCard(
                         message = "Camera permission denied",
                         description = "You have denied the camera permission. Grant it to capture questions.",
                         retryText = "Retry",
-                        onRetry = { cameraLauncher.launch(Manifest.permission.CAMERA) },
+                        onRetry = { launchCameraRequest(Manifest.permission.CAMERA) },
                     )
                     PermissionAction.REQUEST_ACCESSIBILITY -> PermissionStep(
                         icon = Icons.Filled.Visibility,

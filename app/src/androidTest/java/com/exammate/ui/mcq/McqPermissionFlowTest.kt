@@ -5,9 +5,11 @@ import android.content.Intent
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import com.exammate.mcq.CameraPermissionStore
 import com.exammate.mcq.ScreenCaptureRequester
 import com.exammate.mcq.ScreenCaptureResult
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -69,6 +71,24 @@ class McqPermissionFlowTest {
         )
 
         composeRule.onNodeWithText("Capture session active").assertIsDisplayed()
+    }
+
+    @Test
+    fun cameraDenied_invokesBackToHome() {
+        var wentHome = false
+        composeRule.setContent {
+            McqSolverScreen(
+                onBack = {},
+                onBackToHome = { wentHome = true },
+                checker = FakeChecker(cameraGranted = false, accessibilityEnabled = false),
+                cameraPermissionStore = FakeStore(denied = false),
+                screenCaptureRequester = FakeRequester(),
+                requestCamera = { _, onResult -> onResult(false) },
+            )
+        }
+
+        composeRule.onNodeWithText("Allow camera access").performClick()
+        composeRule.runOnIdle { assertTrue(wentHome) }
     }
 
     private fun setContent(

@@ -6,6 +6,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import com.exammate.mcq.SharedPrefsCameraPermissionStore
 import com.exammate.ui.splash.SPLASH_DURATION_MS
 import org.junit.Rule
 import org.junit.Test
@@ -34,13 +36,26 @@ class AppNavigationTest {
     }
 
     @Test
-    fun mcqCard_navigatesToMcqSolver() {
+    fun mcqCard_navigatesToMcqPermissionFlow() {
+        setCameraDenied(false)
         advanceToHome()
 
         composeTestRule.onNodeWithText("Real-Time MCQ Solver").performClick()
 
-        composeTestRule.onNodeWithText("Real-Time MCQ Solver").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Coming soon").assertIsDisplayed()
+        composeTestRule.onNodeWithText("MCQ Solver").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Camera access").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Allow camera access").assertIsDisplayed()
+    }
+
+    @Test
+    fun reEntryAfterCameraDenial_showsDeniedWithRetry() {
+        setCameraDenied(true)
+        advanceToHome()
+
+        composeTestRule.onNodeWithText("Real-Time MCQ Solver").performClick()
+
+        composeTestRule.onNodeWithText("Camera permission denied").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Retry").assertIsDisplayed()
     }
 
     @Test
@@ -54,7 +69,8 @@ class AppNavigationTest {
     }
 
     @Test
-    fun backFromPlaceholder_returnsToHome() {
+    fun backFromMcqSolver_returnsToHome() {
+        setCameraDenied(false)
         advanceToHome()
 
         composeTestRule.onNodeWithText("Real-Time MCQ Solver").performClick()
@@ -66,5 +82,10 @@ class AppNavigationTest {
     private fun advanceToHome() {
         composeTestRule.mainClock.advanceTimeBy(SPLASH_DURATION_MS + 500)
         composeTestRule.waitForIdle()
+    }
+
+    private fun setCameraDenied(denied: Boolean) {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        SharedPrefsCameraPermissionStore(context).cameraDenied = denied
     }
 }
