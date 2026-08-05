@@ -663,12 +663,12 @@ The output should be organized so that each story is independently implementable
 
 # Image Placeholders
 
-![Home Screen](docs/images/home-screen.png)
+![Home Screen](public/home-screen.png)
 Home Screen
 
-![MCQ Solver](docs/images/mcq-solver.png)
+![MCQ Solver](public/mcq-solver.png)
  MCQ Solver
 
-![Theory Question Solver](docs/images/theory-solver.png)
+![Theory Question Solver](public/theory-solver.png)
 Theory Question Solver
 

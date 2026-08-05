@@ -127,7 +127,7 @@ Implementation is strictly sequential by iteration; within an iteration stories 
 
 Reference design for the Monitor view / capture screen:
 
-![Expected UI](docs/ui/expected-ui.png)
+![Expected UI](public/expected-ui.png)
 
 ## Working agreement
 
