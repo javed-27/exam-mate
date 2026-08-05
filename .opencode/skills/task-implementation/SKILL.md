@@ -121,7 +121,7 @@ orchestrator:
 
 ## Step 7 — Commit
 
-Once the user approves and all tests pass:
+Once the user approves and all tests pass check the task:
 
 ```bash
 git add <relevant files>
