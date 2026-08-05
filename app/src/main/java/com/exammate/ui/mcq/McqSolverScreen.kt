@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -38,6 +39,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,6 +58,7 @@ import com.exammate.mcq.DefaultScreenCaptureRequester
 import com.exammate.mcq.DemoAnswerProvider
 import com.exammate.mcq.McqAnswerProvider
 import com.exammate.mcq.McqAnswerState
+import com.exammate.mcq.McqAnswerStateSaver
 import com.exammate.mcq.McqPermissionState
 import com.exammate.mcq.PermissionAction
 import com.exammate.mcq.ScreenCaptureRequester
@@ -88,11 +91,13 @@ fun McqSolverScreen(
     var cameraGranted by remember { mutableStateOf(effectiveChecker.isCameraGranted()) }
     var cameraDeniedFlag by remember { mutableStateOf(effectiveStore.cameraDenied) }
     var accessibilityGranted by remember { mutableStateOf(effectiveChecker.isAccessibilityEnabled()) }
-    var accessibilityDenied by remember { mutableStateOf(false) }
-    var screenCaptureGranted by remember { mutableStateOf(initialScreenCaptureGranted) }
-    var screenCaptureDenied by remember { mutableStateOf(false) }
+    var accessibilityDenied by rememberSaveable { mutableStateOf(false) }
+    var screenCaptureGranted by rememberSaveable { mutableStateOf(initialScreenCaptureGranted) }
+    var screenCaptureDenied by rememberSaveable { mutableStateOf(false) }
     var settingsOpened by remember { mutableStateOf(false) }
-    var answerState by remember { mutableStateOf(effectiveAnswerProvider.initialState) }
+    var answerState by rememberSaveable(stateSaver = McqAnswerStateSaver) {
+        mutableStateOf(effectiveAnswerProvider.initialState)
+    }
 
     val onCameraResult: (Boolean) -> Unit = { granted ->
         if (granted) {
@@ -196,45 +201,53 @@ fun McqSolverScreen(
             }
         }
 
-        if (cameraGranted) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(
-                        if (captureActive) {
-                            Modifier.weight(0.7f)
-                        } else {
-                            Modifier
-                                .padding(horizontal = 16.dp)
-                                .height(220.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
+        when {
+            cameraGranted && captureActive -> {
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                    McqCaptureLayout(
+                        landscape = isLandscape(maxWidth, maxHeight),
+                        captureArea = { modifier ->
+                            Box(modifier = modifier) {
+                                CameraPreview(
+                                    modifier = Modifier.fillMaxSize().testTag(CAMERA_PREVIEW_TAG),
+                                )
+                                Text(
+                                    text = "Align the question within the frame",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.White,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .fillMaxWidth()
+                                        .background(Color.Black.copy(alpha = 0.5f))
+                                        .padding(vertical = 8.dp),
+                                )
+                            }
                         },
-                    ),
-            ) {
-                CameraPreview(modifier = Modifier.fillMaxSize().testTag(CAMERA_PREVIEW_TAG))
-                if (captureActive) {
-                    Text(
-                        text = "Align the question within the frame",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .background(Color.Black.copy(alpha = 0.5f))
-                            .padding(vertical = 8.dp),
+                        answerArea = { modifier ->
+                            AnswerPanel(
+                                state = answerState,
+                                modifier = modifier,
+                            )
+                        },
                     )
+                }
+            }
+            cameraGranted -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .height(220.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                ) {
+                    CameraPreview(modifier = Modifier.fillMaxSize().testTag(CAMERA_PREVIEW_TAG))
                 }
             }
         }
 
-        if (captureActive) {
-            AnswerPanel(
-                state = answerState,
-                modifier = Modifier.weight(0.3f),
-            )
-        } else {
+        if (!captureActive) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

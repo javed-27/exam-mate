@@ -2,11 +2,15 @@ package com.exammate.ui.mcq
 
 import android.app.Activity
 import android.content.Intent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.exammate.mcq.CameraPermissionStore
@@ -134,6 +138,63 @@ class McqPermissionFlowTest {
     }
 
     @Test
+    fun landscapeLayout_showsCaptureLeftOfAnswer() {
+        composeRule.setContent {
+            McqCaptureLayout(
+                landscape = true,
+                captureArea = { modifier -> Box(modifier = modifier.testTag(CAPTURE_AREA_TAG)) {} },
+                answerArea = { modifier -> Box(modifier = modifier.testTag(ANSWER_AREA_TAG)) {} },
+            )
+        }
+
+        val captureRight = composeRule.onNodeWithTag(CAPTURE_AREA_TAG)
+            .getUnclippedBoundsInRoot().right
+        val answerLeft = composeRule.onNodeWithTag(ANSWER_AREA_TAG)
+            .getUnclippedBoundsInRoot().left
+        assertTrue(captureRight <= answerLeft)
+    }
+
+    @Test
+    fun portraitLayout_stacksCaptureAboveAnswer() {
+        composeRule.setContent {
+            McqCaptureLayout(
+                landscape = false,
+                captureArea = { modifier -> Box(modifier = modifier.testTag(CAPTURE_AREA_TAG)) {} },
+                answerArea = { modifier -> Box(modifier = modifier.testTag(ANSWER_AREA_TAG)) {} },
+            )
+        }
+
+        val captureBottom = composeRule.onNodeWithTag(CAPTURE_AREA_TAG)
+            .getUnclippedBoundsInRoot().bottom
+        val answerTop = composeRule.onNodeWithTag(ANSWER_AREA_TAG)
+            .getUnclippedBoundsInRoot().top
+        assertTrue(captureBottom <= answerTop)
+    }
+
+    @Test
+    fun answerSurvivesRecreation() {
+        val restorationTester = StateRestorationTester(composeRule)
+        restorationTester.setContent {
+            McqSolverScreen(
+                onBack = {},
+                onBackToHome = {},
+                checker = FakeChecker(cameraGranted = true, accessibilityEnabled = true),
+                cameraPermissionStore = FakeStore(denied = false),
+                screenCaptureRequester = FakeRequester(),
+                initialScreenCaptureGranted = true,
+                answerProvider = FakeAnswerProvider(McqAnswerState.Ready(SampleAnswer)),
+            )
+        }
+
+        composeRule.onNodeWithText(SampleAnswer.answer).assertIsDisplayed()
+
+        restorationTester.emulateSavedInstanceStateRestore()
+
+        composeRule.onNodeWithText("Real-Time MCQ Solver").assertIsDisplayed()
+        composeRule.onNodeWithText(SampleAnswer.answer).assertIsDisplayed()
+    }
+
+    @Test
     fun cameraDenied_invokesBackToHome() {
         var wentHome = false
         composeRule.setContent {
@@ -196,6 +257,9 @@ class McqPermissionFlowTest {
     }
 
     private companion object {
+        const val CAPTURE_AREA_TAG = "capture_area"
+        const val ANSWER_AREA_TAG = "answer_area"
+
         val SampleAnswer = McqAnswer(
             question = "1. Which of the following is the capital of France?",
             answer = "C. Paris",
