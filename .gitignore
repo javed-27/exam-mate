@@ -13,3 +13,6 @@ build/
 /ChatGPT Image Aug 4, 2026, 02_44_28 PM.png
 /ChatGPT Image Aug 4, 2026, 03_04_51 PM.png
 /ChatGPT Image Aug 4, 2026, 03_10_42 PM.png
+
+# opencode plan-mode artifacts
+.opencode/plans/
