@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Exam Mate</string>
+    <string name="accessibility_service_label">MCQ Screen Observer</string>
+    <string name="accessibility_service_description">Observes the screen in real time so the MCQ Solver can detect the visible question.</string>
 </resources>
