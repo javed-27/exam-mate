@@ -5,8 +5,8 @@ import android.content.ComponentName
 import android.content.Context
 import android.view.accessibility.AccessibilityManager
 
-fun accessibilityServiceId(serviceClass: Class<*>): String =
-    ComponentName(serviceClass.`package`!!.name, serviceClass.name).flattenToShortString()
+fun accessibilityServiceId(context: Context, serviceClass: Class<*>): String =
+    ComponentName(context.packageName, serviceClass.name).flattenToShortString()
 
 fun isAccessibilityServiceEnabled(
     serviceId: String,
@@ -22,7 +22,7 @@ fun isAccessibilityServiceEnabled(
         .getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
         .map { it.id }
     return isAccessibilityServiceEnabled(
-        serviceId = accessibilityServiceId(serviceClass),
+        serviceId = accessibilityServiceId(context, serviceClass),
         enabledServiceIds = enabledServiceIds,
     )
 }

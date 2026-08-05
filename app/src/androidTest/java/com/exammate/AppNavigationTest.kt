@@ -9,6 +9,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.exammate.mcq.SharedPrefsCameraPermissionStore
 import com.exammate.ui.splash.SPLASH_DURATION_MS
+import java.io.FileInputStream
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -37,6 +38,7 @@ class AppNavigationTest {
 
     @Test
     fun mcqCard_navigatesToMcqPermissionFlow() {
+        revokeCameraPermission()
         setCameraDenied(false)
         advanceToHome()
 
@@ -49,6 +51,7 @@ class AppNavigationTest {
 
     @Test
     fun reEntryAfterCameraDenial_showsDeniedWithRetry() {
+        revokeCameraPermission()
         setCameraDenied(true)
         advanceToHome()
 
@@ -87,5 +90,13 @@ class AppNavigationTest {
     private fun setCameraDenied(denied: Boolean) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         SharedPrefsCameraPermissionStore(context).cameraDenied = denied
+    }
+
+    private fun revokeCameraPermission() {
+        val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val pfd = uiAutomation.executeShellCommand(
+            "pm revoke ${composeTestRule.activity.packageName} android.permission.CAMERA",
+        )
+        pfd.use { FileInputStream(it.fileDescriptor).readBytes() }
     }
 }
