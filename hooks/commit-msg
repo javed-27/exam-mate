@@ -5,13 +5,13 @@ header=$(head -n 1 "$commit_msg_file")
 body=$(tail -n +2 "$commit_msg_file")
 
 # Header format:
-# [#<story number>] | <heading> | <author>/<pair>
-header_pattern='^\[#([0-9]+)\] \| .+ \| .+\/.+$'
+# [#<story number>] | <heading> | <assignee>
+header_pattern='^\[#([0-9]+)\] \| .+ \| .+$'
 
 if [[ ! $header =~ $header_pattern ]]; then
   echo "❌ Invalid commit message format"
   echo "Expected format:"
-  echo "[#<story number>] | <heading> | <author>/<pair>"
+  echo "[#<story number>] | <heading> | <assignee>"
   echo "* point 1"
   echo "* point 2"
   exit 1
