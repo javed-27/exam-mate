@@ -7,13 +7,11 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import java.util.concurrent.Executors
 
 private const val TAG = "CameraPreview"
 
@@ -21,7 +19,6 @@ private const val TAG = "CameraPreview"
 fun CameraPreview(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val executor = remember { Executors.newSingleThreadExecutor() }
 
     DisposableEffect(Unit) {
         val providerFuture = ProcessCameraProvider.getInstance(context)
@@ -29,7 +26,6 @@ fun CameraPreview(modifier: Modifier = Modifier) {
             providerFuture.addListener({
                 providerFuture.get().unbindAll()
             }, ContextCompat.getMainExecutor(context))
-            executor.shutdown()
         }
     }
 
@@ -38,26 +34,24 @@ fun CameraPreview(modifier: Modifier = Modifier) {
         factory = { ctx ->
             PreviewView(ctx).apply {
                 scaleType = PreviewView.ScaleType.FILL_CENTER
+                val providerFuture = ProcessCameraProvider.getInstance(ctx)
+                providerFuture.addListener({
+                    try {
+                        val provider = providerFuture.get()
+                        provider.unbindAll()
+                        val preview = Preview.Builder()
+                            .build()
+                            .also { it.setSurfaceProvider(surfaceProvider) }
+                        provider.bindToLifecycle(
+                            lifecycleOwner,
+                            CameraSelector.DEFAULT_BACK_CAMERA,
+                            preview,
+                        )
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to bind camera preview", e)
+                    }
+                }, ContextCompat.getMainExecutor(ctx))
             }
-        },
-        update = { view ->
-            val providerFuture = ProcessCameraProvider.getInstance(context)
-            providerFuture.addListener({
-                try {
-                    val provider = providerFuture.get()
-                    provider.unbindAll()
-                    val preview = Preview.Builder()
-                        .build()
-                        .also { it.setSurfaceProvider(view.surfaceProvider) }
-                    provider.bindToLifecycle(
-                        lifecycleOwner,
-                        CameraSelector.DEFAULT_BACK_CAMERA,
-                        preview,
-                    )
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to bind camera preview", e)
-                }
-            }, ContextCompat.getMainExecutor(context))
         },
     )
 }

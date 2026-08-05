@@ -2,8 +2,10 @@ package com.exammate.ui.mcq
 
 import android.app.Activity
 import android.content.Intent
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.exammate.mcq.CameraPermissionStore
@@ -71,6 +73,17 @@ class McqPermissionFlowTest {
         )
 
         composeRule.onNodeWithText("Capture session active").assertIsDisplayed()
+        composeRule.onAllNodesWithTag(CAMERA_PREVIEW_TAG).assertCountEquals(1)
+    }
+
+    @Test
+    fun screenCaptureStep_keepsSingleCameraPreview() {
+        setContent(
+            checker = FakeChecker(cameraGranted = true, accessibilityEnabled = true),
+            store = FakeStore(denied = false),
+        )
+
+        composeRule.onAllNodesWithTag(CAMERA_PREVIEW_TAG).assertCountEquals(1)
     }
 
     @Test

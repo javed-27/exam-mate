@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -51,6 +52,8 @@ import com.exammate.mcq.ScreenCaptureRequester
 import com.exammate.mcq.SharedPrefsCameraPermissionStore
 import com.exammate.mcq.StepStatus
 import com.exammate.mcq.nextAction
+
+internal const val CAMERA_PREVIEW_TAG = "camera_preview"
 
 @Composable
 fun McqSolverScreen(
@@ -161,14 +164,27 @@ fun McqSolverScreen(
             )
         }
 
-        if (captureActive) {
+        if (cameraGranted) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
+                    .then(
+                        if (captureActive) {
+                            Modifier.weight(1f)
+                        } else {
+                            Modifier
+                                .padding(horizontal = 16.dp)
+                                .height(220.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                        },
+                    ),
             ) {
-                CameraPreview(modifier = Modifier.fillMaxSize())
+                CameraPreview(modifier = Modifier.fillMaxSize().testTag(CAMERA_PREVIEW_TAG))
             }
+        }
+
+        if (captureActive) {
             Text(
                 text = "Capture session active",
                 style = MaterialTheme.typography.titleLarge,
@@ -180,22 +196,12 @@ fun McqSolverScreen(
         } else {
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
+                    .weight(1f)
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                if (cameraGranted) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(220.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                    ) {
-                        CameraPreview(modifier = Modifier.fillMaxSize())
-                    }
-                }
                 when (action) {
                     PermissionAction.REQUEST_CAMERA -> PermissionStep(
                         icon = Icons.Filled.CameraAlt,
@@ -219,7 +225,7 @@ fun McqSolverScreen(
                         granted = false,
                         onButtonClick = {
                             settingsOpened = true
-                                    settingsLauncher.launch(accessibilitySettingsIntent())
+                            settingsLauncher.launch(accessibilitySettingsIntent())
                         },
                     )
                     PermissionAction.SHOW_STEP_DENIED -> {
@@ -230,7 +236,7 @@ fun McqSolverScreen(
                                 retryText = "Try again",
                                 onRetry = {
                                     settingsOpened = true
-                            settingsLauncher.launch(accessibilitySettingsIntent())
+                                    settingsLauncher.launch(accessibilitySettingsIntent())
                                 },
                             )
                         } else {
