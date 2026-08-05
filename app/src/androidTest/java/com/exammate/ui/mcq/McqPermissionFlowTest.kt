@@ -4,11 +4,15 @@ import android.app.Activity
 import android.content.Intent
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.exammate.mcq.CameraPermissionStore
+import com.exammate.mcq.McqAnswer
+import com.exammate.mcq.McqAnswerProvider
+import com.exammate.mcq.McqAnswerState
 import com.exammate.mcq.ScreenCaptureRequester
 import com.exammate.mcq.ScreenCaptureResult
 import org.junit.Assert.assertTrue
@@ -65,15 +69,58 @@ class McqPermissionFlowTest {
     }
 
     @Test
-    fun allGranted_showsCaptureSessionActive() {
+    fun allGranted_showsCaptureLayout() {
         setContent(
             checker = FakeChecker(cameraGranted = true, accessibilityEnabled = true),
             store = FakeStore(denied = false),
             initialScreenCaptureGranted = true,
+            answerProvider = FakeAnswerProvider(McqAnswerState.Waiting),
         )
 
-        composeRule.onNodeWithText("Capture session active").assertIsDisplayed()
+        composeRule.onNodeWithText("Real-Time MCQ Solver").assertIsDisplayed()
+        composeRule.onNodeWithText("Capturing…").assertIsDisplayed()
+        composeRule.onNodeWithText("Align the question within the frame").assertIsDisplayed()
+        composeRule.onNodeWithText("Waiting for question…").assertIsDisplayed()
         composeRule.onAllNodesWithTag(CAMERA_PREVIEW_TAG).assertCountEquals(1)
+        composeRule.onAllNodesWithTag(ANSWER_PANEL_TAG).assertCountEquals(1)
+    }
+
+    @Test
+    fun captureReady_showsQuestionAnswerExplanationInOrder() {
+        setContent(
+            checker = FakeChecker(cameraGranted = true, accessibilityEnabled = true),
+            store = FakeStore(denied = false),
+            initialScreenCaptureGranted = true,
+            answerProvider = FakeAnswerProvider(McqAnswerState.Ready(SampleAnswer)),
+        )
+
+        composeRule.onNodeWithText("Question").assertIsDisplayed()
+        composeRule.onNodeWithText(SampleAnswer.question).assertIsDisplayed()
+        composeRule.onNodeWithText(SampleAnswer.answer).assertIsDisplayed()
+        composeRule.onNodeWithText("Confidence: 98%").assertIsDisplayed()
+        composeRule.onNodeWithText("Explanation").assertIsDisplayed()
+        composeRule.onNodeWithText(SampleAnswer.explanation).assertIsDisplayed()
+
+        val questionTop = composeRule.onNodeWithText(SampleAnswer.question)
+            .getUnclippedBoundsInRoot().top
+        val answerTop = composeRule.onNodeWithText(SampleAnswer.answer)
+            .getUnclippedBoundsInRoot().top
+        val explanationTop = composeRule.onNodeWithText(SampleAnswer.explanation)
+            .getUnclippedBoundsInRoot().top
+        assertTrue(questionTop < answerTop)
+        assertTrue(answerTop < explanationTop)
+    }
+
+    @Test
+    fun captureProcessing_showsAnalysing() {
+        setContent(
+            checker = FakeChecker(cameraGranted = true, accessibilityEnabled = true),
+            store = FakeStore(denied = false),
+            initialScreenCaptureGranted = true,
+            answerProvider = FakeAnswerProvider(McqAnswerState.Processing),
+        )
+
+        composeRule.onNodeWithText("Analysing question…").assertIsDisplayed()
     }
 
     @Test
@@ -108,6 +155,7 @@ class McqPermissionFlowTest {
         checker: McqPermissionChecker,
         store: CameraPermissionStore,
         initialScreenCaptureGranted: Boolean = false,
+        answerProvider: McqAnswerProvider = FakeAnswerProvider(McqAnswerState.Waiting),
     ) {
         composeRule.setContent {
             McqSolverScreen(
@@ -117,6 +165,7 @@ class McqPermissionFlowTest {
                 cameraPermissionStore = store,
                 screenCaptureRequester = FakeRequester(),
                 initialScreenCaptureGranted = initialScreenCaptureGranted,
+                answerProvider = answerProvider,
             )
         }
     }
@@ -137,5 +186,21 @@ class McqPermissionFlowTest {
         override fun createScreenCaptureIntent(activity: Activity): Intent = Intent()
         override fun parseResult(resultCode: Int, data: Intent?): ScreenCaptureResult =
             ScreenCaptureResult(granted = true, projectionData = data)
+    }
+
+    private class FakeAnswerProvider(
+        override val initialState: McqAnswerState,
+    ) : McqAnswerProvider {
+        override val delayMillis: Long = 0L
+        override fun next(current: McqAnswerState): McqAnswerState? = null
+    }
+
+    private companion object {
+        val SampleAnswer = McqAnswer(
+            question = "1. Which of the following is the capital of France?",
+            answer = "C. Paris",
+            confidence = 0.98,
+            explanation = "Paris is the capital and most populous city of France.",
+        )
     }
 }
