@@ -1,0 +1,30 @@
+#!/bin/bash
+
+commit_msg_file=$1
+header=$(head -n 1 "$commit_msg_file")
+body=$(tail -n +2 "$commit_msg_file")
+
+# Header format:
+# [#<story number>] | <heading> | <author>/<pair>
+header_pattern='^\[#([0-9]+)\] \| .+ \| .+\/.+$'
+
+if [[ ! $header =~ $header_pattern ]]; then
+  echo "❌ Invalid commit message format"
+  echo "Expected format:"
+  echo "[#<story number>] | <heading> | <author>/<pair>"
+  echo "* point 1"
+  echo "* point 2"
+  exit 1
+fi
+
+# Body: every non-empty line must be a bullet point prefixed with "* "
+while IFS= read -r line; do
+  if [[ -n "$line" && "$line" != \** ]]; then
+    echo "❌ Invalid commit message body"
+    echo "Each body line must be a bullet point:"
+    echo "* <detail>"
+    exit 1
+  fi
+done <<< "$body"
+
+exit 0

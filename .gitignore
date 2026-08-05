@@ -9,10 +9,6 @@ build/
 .cxx
 .kotlin
 
-# Deno-project hooks (not applicable to this repo)
-hooks/
-setup.sh
-
 # Redundant root copies of design mockups (canonical in docs/images/)
 /ChatGPT Image Aug 4, 2026, 02_44_28 PM.png
 /ChatGPT Image Aug 4, 2026, 03_04_51 PM.png
