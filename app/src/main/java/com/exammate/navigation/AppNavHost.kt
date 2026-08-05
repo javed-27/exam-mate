@@ -33,7 +33,10 @@ fun AppNavHost() {
             )
         }
         composable(Routes.HOME) {
-            HomeScreen()
+            HomeScreen(
+                onMcqClick = { navController.navigate(Routes.MCQ_SOLVER) },
+                onTheoryClick = { navController.navigate(Routes.THEORY_SOLVER) },
+            )
         }
         composable(Routes.MCQ_SOLVER) {
             McqSolverScreen(onBack = { navController.popBackStack() })

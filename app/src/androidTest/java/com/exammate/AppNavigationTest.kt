@@ -27,6 +27,6 @@ class AppNavigationTest {
         composeTestRule.mainClock.advanceTimeBy(SPLASH_DURATION_MS + 500)
         composeTestRule.waitForIdle()
 
-        composeTestRule.onNodeWithText("Welcome to Exam Mate").assertIsDisplayed()
+        composeTestRule.onNodeWithText("AI Study Assistant").assertIsDisplayed()
     }
 }
