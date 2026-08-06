@@ -39,6 +39,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -55,18 +56,19 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.exammate.mcq.CameraPermissionStore
 import com.exammate.mcq.DefaultScreenCaptureRequester
-import com.exammate.mcq.DemoAnswerProvider
-import com.exammate.mcq.McqAnswerProvider
 import com.exammate.mcq.McqAnswerState
 import com.exammate.mcq.McqAnswerStateSaver
 import com.exammate.mcq.McqPermissionState
+import com.exammate.mcq.McqPipeline
+import com.exammate.mcq.McqSolverPipeline
 import com.exammate.mcq.PermissionAction
 import com.exammate.mcq.ScreenCaptureRequester
 import com.exammate.mcq.SharedPrefsCameraPermissionStore
 import com.exammate.mcq.StepStatus
+import com.exammate.mcq.ai.OllamaMcqClient
 import com.exammate.mcq.nextAction
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
+import com.exammate.mcq.ocr.MlKitOcrService
+import kotlinx.coroutines.launch
 
 internal const val CAMERA_PREVIEW_TAG = "camera_preview"
 
@@ -79,14 +81,17 @@ fun McqSolverScreen(
     screenCaptureRequester: ScreenCaptureRequester? = null,
     initialScreenCaptureGranted: Boolean = false,
     requestCamera: ((permission: String, onResult: (Boolean) -> Unit) -> Unit)? = null,
-    answerProvider: McqAnswerProvider? = null,
+    pipeline: McqPipeline? = null,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val effectiveChecker = checker ?: remember { AndroidPermissionChecker(context) }
     val effectiveStore = cameraPermissionStore ?: remember { SharedPrefsCameraPermissionStore(context) }
     val effectiveRequester = screenCaptureRequester ?: remember { DefaultScreenCaptureRequester() }
-    val effectiveAnswerProvider = answerProvider ?: remember { DemoAnswerProvider() }
+    val effectivePipeline = pipeline ?: remember {
+        McqSolverPipeline(ocr = MlKitOcrService(), aiClient = OllamaMcqClient())
+    }
+    val captureScope = rememberCoroutineScope()
 
     var cameraGranted by remember { mutableStateOf(effectiveChecker.isCameraGranted()) }
     var cameraDeniedFlag by remember { mutableStateOf(effectiveStore.cameraDenied) }
@@ -96,7 +101,7 @@ fun McqSolverScreen(
     var screenCaptureDenied by rememberSaveable { mutableStateOf(false) }
     var settingsOpened by remember { mutableStateOf(false) }
     var answerState by rememberSaveable(stateSaver = McqAnswerStateSaver) {
-        mutableStateOf(effectiveAnswerProvider.initialState)
+        mutableStateOf(effectivePipeline.initialState)
     }
 
     val onCameraResult: (Boolean) -> Unit = { granted ->
@@ -170,11 +175,9 @@ fun McqSolverScreen(
     val captureActive = action == PermissionAction.START_CAPTURE
 
     if (captureActive) {
-        LaunchedEffect(effectiveAnswerProvider) {
-            while (isActive) {
-                delay(effectiveAnswerProvider.delayMillis)
-                val next = effectiveAnswerProvider.next(answerState) ?: break
-                answerState = next
+        LaunchedEffect(effectivePipeline) {
+            (answerState as? McqAnswerState.Ready)?.let { ready ->
+                effectivePipeline.markDisplayed(ready.answer.question)
             }
         }
     }
@@ -210,6 +213,9 @@ fun McqSolverScreen(
                             Box(modifier = modifier) {
                                 CameraPreview(
                                     modifier = Modifier.fillMaxSize().testTag(CAMERA_PREVIEW_TAG),
+                                    onFrame = { bitmap ->
+                                        captureScope.launch { answerState = effectivePipeline.onFrame(bitmap) }
+                                    },
                                 )
                                 Text(
                                     text = "Align the question within the frame",

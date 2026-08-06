@@ -2,6 +2,7 @@ package com.exammate.ui.mcq
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Bitmap
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertCountEquals
@@ -15,8 +16,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.exammate.mcq.CameraPermissionStore
 import com.exammate.mcq.McqAnswer
-import com.exammate.mcq.McqAnswerProvider
 import com.exammate.mcq.McqAnswerState
+import com.exammate.mcq.McqPipeline
 import com.exammate.mcq.ScreenCaptureRequester
 import com.exammate.mcq.ScreenCaptureResult
 import org.junit.Assert.assertTrue
@@ -78,7 +79,7 @@ class McqPermissionFlowTest {
             checker = FakeChecker(cameraGranted = true, accessibilityEnabled = true),
             store = FakeStore(denied = false),
             initialScreenCaptureGranted = true,
-            answerProvider = FakeAnswerProvider(McqAnswerState.Waiting),
+            pipeline = FakePipeline(McqAnswerState.Waiting),
         )
 
         composeRule.onNodeWithText("Real-Time MCQ Solver").assertIsDisplayed()
@@ -95,7 +96,7 @@ class McqPermissionFlowTest {
             checker = FakeChecker(cameraGranted = true, accessibilityEnabled = true),
             store = FakeStore(denied = false),
             initialScreenCaptureGranted = true,
-            answerProvider = FakeAnswerProvider(McqAnswerState.Ready(SampleAnswer)),
+            pipeline = FakePipeline(McqAnswerState.Ready(SampleAnswer)),
         )
 
         composeRule.onNodeWithText("Question").assertIsDisplayed()
@@ -121,7 +122,7 @@ class McqPermissionFlowTest {
             checker = FakeChecker(cameraGranted = true, accessibilityEnabled = true),
             store = FakeStore(denied = false),
             initialScreenCaptureGranted = true,
-            answerProvider = FakeAnswerProvider(McqAnswerState.Processing),
+            pipeline = FakePipeline(McqAnswerState.Processing),
         )
 
         composeRule.onNodeWithText("Analysing question…").assertIsDisplayed()
@@ -182,7 +183,7 @@ class McqPermissionFlowTest {
                 cameraPermissionStore = FakeStore(denied = false),
                 screenCaptureRequester = FakeRequester(),
                 initialScreenCaptureGranted = true,
-                answerProvider = FakeAnswerProvider(McqAnswerState.Ready(SampleAnswer)),
+                pipeline = FakePipeline(McqAnswerState.Ready(SampleAnswer)),
             )
         }
 
@@ -216,7 +217,7 @@ class McqPermissionFlowTest {
         checker: McqPermissionChecker,
         store: CameraPermissionStore,
         initialScreenCaptureGranted: Boolean = false,
-        answerProvider: McqAnswerProvider = FakeAnswerProvider(McqAnswerState.Waiting),
+        pipeline: McqPipeline = FakePipeline(McqAnswerState.Waiting),
     ) {
         composeRule.setContent {
             McqSolverScreen(
@@ -226,7 +227,7 @@ class McqPermissionFlowTest {
                 cameraPermissionStore = store,
                 screenCaptureRequester = FakeRequester(),
                 initialScreenCaptureGranted = initialScreenCaptureGranted,
-                answerProvider = answerProvider,
+                pipeline = pipeline,
             )
         }
     }
@@ -249,11 +250,10 @@ class McqPermissionFlowTest {
             ScreenCaptureResult(granted = true, projectionData = data)
     }
 
-    private class FakeAnswerProvider(
+    private class FakePipeline(
         override val initialState: McqAnswerState,
-    ) : McqAnswerProvider {
-        override val delayMillis: Long = 0L
-        override fun next(current: McqAnswerState): McqAnswerState? = null
+    ) : McqPipeline {
+        override suspend fun onFrame(bitmap: Bitmap): McqAnswerState = initialState
     }
 
     private companion object {
