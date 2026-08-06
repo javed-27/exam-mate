@@ -3,7 +3,10 @@ package com.exammate.mcq
 import android.graphics.Bitmap
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.exammate.mcq.ai.McqAiClient
+import com.exammate.mcq.ai.McqAiEvent
 import com.exammate.mcq.ocr.OcrService
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -14,15 +17,15 @@ import org.junit.runner.RunWith
 class McqPipelineInstrumentedTest {
 
     @Test
-    fun onFrame_newQuestion_returnsReadyAnswer() = runBlocking {
+    fun onFrame_newQuestion_reachesReady() = runBlocking {
         val ocr = FakeOcrService(listOf(SAMPLE_TEXT))
         val ai = FakeAiClient(SampleAnswer)
         val pipeline = McqSolverPipeline(ocr, ai, minFrameIntervalMillis = 0L)
 
-        val result = pipeline.onFrame(bitmap())
+        pipeline.onFrame(bitmap())
 
-        assertTrue(result is McqAnswerState.Ready)
-        assertEquals(SampleAnswer, (result as McqAnswerState.Ready).answer)
+        val ready = pipeline.state.value as McqAnswerState.Ready
+        assertEquals(SampleAnswer, ready.answer)
         assertEquals(1, ai.callCount)
     }
 
@@ -32,11 +35,10 @@ class McqPipelineInstrumentedTest {
         val ai = FakeAiClient(SampleAnswer)
         val pipeline = McqSolverPipeline(ocr, ai, minFrameIntervalMillis = 0L)
 
-        val first = pipeline.onFrame(bitmap())
-        val second = pipeline.onFrame(bitmap())
+        pipeline.onFrame(bitmap())
+        pipeline.onFrame(bitmap())
 
-        assertTrue(first is McqAnswerState.Ready)
-        assertTrue(second is McqAnswerState.Ready)
+        assertTrue(pipeline.state.value is McqAnswerState.Ready)
         assertEquals(1, ai.callCount)
     }
 
@@ -46,12 +48,11 @@ class McqPipelineInstrumentedTest {
         val ai = FakeAiClient(SampleAnswer)
         val pipeline = McqSolverPipeline(ocr, ai, minFrameIntervalMillis = 0L)
 
-        val first = pipeline.onFrame(bitmap())
-        val second = pipeline.onFrame(bitmap())
+        pipeline.onFrame(bitmap())
+        pipeline.onFrame(bitmap())
 
-        assertTrue(first is McqAnswerState.Ready)
-        assertTrue(second is McqAnswerState.Ready)
-        assertEquals(SampleAnswer, (second as McqAnswerState.Ready).answer)
+        val ready = pipeline.state.value as McqAnswerState.Ready
+        assertEquals(SampleAnswer, ready.answer)
     }
 
     @Test
@@ -60,13 +61,12 @@ class McqPipelineInstrumentedTest {
         val ai = FakeAiClient(SampleAnswer)
         val pipeline = McqSolverPipeline(ocr, ai, minFrameIntervalMillis = 0L)
 
-        val first = pipeline.onFrame(bitmap())
+        pipeline.onFrame(bitmap())
         ocr.failNext = true
-        val second = pipeline.onFrame(bitmap())
+        pipeline.onFrame(bitmap())
 
-        assertTrue(first is McqAnswerState.Ready)
-        assertTrue(second is McqAnswerState.Ready)
-        assertEquals(SampleAnswer, (second as McqAnswerState.Ready).answer)
+        val ready = pipeline.state.value as McqAnswerState.Ready
+        assertEquals(SampleAnswer, ready.answer)
     }
 
     private fun bitmap(): Bitmap = Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888)
@@ -90,9 +90,10 @@ class McqPipelineInstrumentedTest {
     ) : McqAiClient {
         var callCount = 0
 
-        override suspend fun solve(question: String, options: List<String>): McqAnswer {
+        override fun stream(question: String, options: List<String>): Flow<McqAiEvent> = flow {
             callCount++
-            return answer
+            emit(McqAiEvent.Text("Paris"))
+            emit(McqAiEvent.Answer(answer))
         }
     }
 

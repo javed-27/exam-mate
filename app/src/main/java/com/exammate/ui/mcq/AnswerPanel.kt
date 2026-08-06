@@ -48,6 +48,25 @@ fun AnswerPanel(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            is McqAnswerState.Streaming -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Generating answer…",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (state.partialText.isNotBlank()) {
+                    Text(
+                        text = state.partialText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
             is McqAnswerState.Ready -> {
                 SectionLabel("Question")
                 Text(

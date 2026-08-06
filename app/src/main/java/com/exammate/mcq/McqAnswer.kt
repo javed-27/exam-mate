@@ -13,6 +13,7 @@ data class McqAnswer(
 sealed interface McqAnswerState {
     data object Waiting : McqAnswerState
     data object Processing : McqAnswerState
+    data class Streaming(val partialText: String) : McqAnswerState
     data class Ready(val answer: McqAnswer) : McqAnswerState
 }
 
@@ -21,6 +22,7 @@ val McqAnswerStateSaver: Saver<McqAnswerState, Any> = listSaver(
         when (state) {
             McqAnswerState.Waiting -> listOf("waiting")
             McqAnswerState.Processing -> listOf("processing")
+            is McqAnswerState.Streaming -> listOf("processing")
             is McqAnswerState.Ready -> listOf(
                 "ready",
                 state.answer.question,

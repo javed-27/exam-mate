@@ -2,15 +2,22 @@ package com.exammate.mcq
 
 import android.graphics.Bitmap
 import com.exammate.mcq.ai.McqAiClient
+import com.exammate.mcq.ai.McqAiEvent
 import com.exammate.mcq.ocr.OcrService
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class McqSolverPipelineTest {
 
     private val QUESTION =
@@ -21,35 +28,35 @@ class McqSolverPipelineTest {
     fun initialState_isWaiting() {
         val pipeline = pipeline()
 
-        assertEquals(McqAnswerState.Waiting, pipeline.initialState)
+        assertEquals(McqAnswerState.Waiting, pipeline.state.value)
     }
 
     @Test
-    fun newQuestion_reachesReady() = runBlocking {
+    fun newQuestion_reachesReady() = runTest {
         val ai = FakeAiClient(answer = SampleAnswer)
         val pipeline = pipeline(ai = ai)
 
-        val result = pipeline.processFrame { QUESTION }
+        pipeline.processFrame { QUESTION }
 
-        val ready = result as McqAnswerState.Ready
+        val ready = pipeline.state.value as McqAnswerState.Ready
         assertEquals(SampleAnswer.answer, ready.answer.answer)
         assertEquals(1, ai.calls)
     }
 
     @Test
-    fun unchangedQuestion_doesNotReprocess() = runBlocking {
+    fun unchangedQuestion_doesNotReprocess() = runTest {
         val ai = FakeAiClient(answer = SampleAnswer)
         val pipeline = pipeline(ai = ai)
 
         pipeline.processFrame { QUESTION }
-        val result = pipeline.processFrame { QUESTION }
+        pipeline.processFrame { QUESTION }
 
-        assertTrue(result is McqAnswerState.Ready)
+        assertTrue(pipeline.state.value is McqAnswerState.Ready)
         assertEquals(1, ai.calls)
     }
 
     @Test
-    fun normalization_allowsDedupeAcrossWhitespace() = runBlocking {
+    fun normalization_allowsDedupeAcrossWhitespace() = runTest {
         val ai = FakeAiClient(answer = SampleAnswer)
         val pipeline = pipeline(ai = ai)
 
@@ -60,7 +67,7 @@ class McqSolverPipelineTest {
     }
 
     @Test
-    fun changedQuestion_reprocesses() = runBlocking {
+    fun changedQuestion_reprocesses() = runTest {
         val ai = FakeAiClient(answer = SampleAnswer)
         val pipeline = pipeline(ai = ai)
 
@@ -71,83 +78,98 @@ class McqSolverPipelineTest {
     }
 
     @Test
-    fun emptyText_doesNothing() = runBlocking {
+    fun emptyText_doesNothing() = runTest {
         val ai = FakeAiClient()
         val pipeline = pipeline(ai = ai)
 
-        val result = pipeline.processFrame { "   \n  " }
+        pipeline.processFrame { "   \n  " }
 
-        assertEquals(McqAnswerState.Waiting, result)
+        assertEquals(McqAnswerState.Waiting, pipeline.state.value)
         assertEquals(0, ai.calls)
     }
 
     @Test
-    fun unparseableText_doesNothing() = runBlocking {
+    fun unparseableText_doesNothing() = runTest {
         val ai = FakeAiClient()
         val pipeline = pipeline(ai = ai)
 
-        val result = pipeline.processFrame { "Just a sentence without any options" }
+        pipeline.processFrame { "Just a sentence without any options" }
 
-        assertEquals(McqAnswerState.Waiting, result)
+        assertEquals(McqAnswerState.Waiting, pipeline.state.value)
         assertEquals(0, ai.calls)
     }
 
     @Test
-    fun ocrFailure_keepsCurrentState() = runBlocking {
+    fun ocrFailure_keepsCurrentState() = runTest {
         val pipeline = pipeline()
 
-        val result = pipeline.processFrame { throw IOException("ocr failed") }
+        pipeline.processFrame { throw IOException("ocr failed") }
 
-        assertEquals(McqAnswerState.Waiting, result)
+        assertEquals(McqAnswerState.Waiting, pipeline.state.value)
     }
 
     @Test
-    fun ocrFailure_afterAnswer_keepsLastAnswer() = runBlocking {
+    fun ocrFailure_afterAnswer_keepsLastAnswer() = runTest {
         val ai = FakeAiClient(answer = SampleAnswer)
         val pipeline = pipeline(ai = ai)
 
         pipeline.processFrame { QUESTION }
-        val result = pipeline.processFrame { throw IOException("ocr failed") }
+        pipeline.processFrame { throw IOException("ocr failed") }
 
-        val ready = result as McqAnswerState.Ready
+        val ready = pipeline.state.value as McqAnswerState.Ready
         assertEquals(SampleAnswer.answer, ready.answer.answer)
     }
 
     @Test
-    fun aiFailure_restoresPreviousAnswer() = runBlocking {
+    fun aiFailure_restoresPreviousAnswer() = runTest {
         val ai = FakeAiClient(answer = SampleAnswer)
         val pipeline = pipeline(ai = ai)
 
         pipeline.processFrame { QUESTION }
         ai.error = IOException("ai failed")
-        val result = pipeline.processFrame { "2. What is 2 + 2?\nA. 3\nB. 4\nC. 5\nD. 6" }
+        pipeline.processFrame { "2. What is 2 + 2?\nA. 3\nB. 4\nC. 5\nD. 6" }
 
-        val ready = result as McqAnswerState.Ready
+        val ready = pipeline.state.value as McqAnswerState.Ready
         assertEquals(SampleAnswer.answer, ready.answer.answer)
         assertEquals(2, ai.calls)
     }
 
     @Test
-    fun aiFailure_withNoPreviousAnswer_staysWaiting() = runBlocking {
+    fun aiFailure_withNoPreviousAnswer_staysWaiting() = runTest {
         val ai = FakeAiClient(error = IOException("ai failed"))
         val pipeline = pipeline(ai = ai)
 
-        val result = pipeline.processFrame { QUESTION }
+        pipeline.processFrame { QUESTION }
 
-        assertEquals(McqAnswerState.Waiting, result)
+        assertEquals(McqAnswerState.Waiting, pipeline.state.value)
     }
 
     @Test
-    fun throttle_skipsRapidFrames() = runBlocking {
+    fun streaming_exposesPartialTextThenReady() = runTest {
+        val ai = FakeAiClient(answer = SampleAnswer, yieldBetweenEmissions = true)
+        val pipeline = pipeline(ai = ai)
+        val states = mutableListOf<McqAnswerState>()
+        backgroundScope.launch { pipeline.state.collect { states += it } }
+
+        pipeline.processFrame { QUESTION }
+        runCurrent()
+
+        assertTrue(states.any { it is McqAnswerState.Streaming })
+        assertTrue(
+            states.any { it is McqAnswerState.Streaming && it.partialText == "Paris is correct." },
+        )
+        assertTrue(states.last() is McqAnswerState.Ready)
+    }
+
+    @Test
+    fun throttle_skipsRapidFrames() = runTest {
         var now = 1000L
         val clock = { now }
         val ai = FakeAiClient(answer = SampleAnswer)
         val pipeline = pipeline(ai = ai, clock = clock)
 
         pipeline.processFrame { QUESTION }
-        val skipped = pipeline.processFrame { "2. What is 2 + 2?\nA. 3\nB. 4\nC. 5\nD. 6" }
-
-        assertTrue(skipped is McqAnswerState.Ready)
+        pipeline.processFrame { "2. What is 2 + 2?\nA. 3\nB. 4\nC. 5\nD. 6" }
         assertEquals(1, ai.calls)
 
         now += 600
@@ -156,14 +178,14 @@ class McqSolverPipelineTest {
     }
 
     @Test
-    fun singleFlight_skipsFramesWhileAnalysing() = runBlocking {
+    fun singleFlight_skipsFramesWhileStreaming() = runTest {
         var now = 1000L
         val clock = { now }
         val entered = CompletableDeferred<Unit>()
         val released = CompletableDeferred<Unit>()
         val ai = FakeAiClient(
             answer = SampleAnswer,
-            onSolveStart = {
+            onStreamStart = {
                 entered.complete(Unit)
                 released.await()
             },
@@ -174,24 +196,37 @@ class McqSolverPipelineTest {
         entered.await()
 
         now += 1000
-        val duringFlight = pipeline.processFrame { "2. What is 2 + 2?\nA. 3\nB. 4\nC. 5\nD. 6" }
+        pipeline.processFrame { "2. What is 2 + 2?\nA. 3\nB. 4\nC. 5\nD. 6" }
+
+        assertEquals(McqAnswerState.Processing, pipeline.state.value)
+        assertEquals(1, ai.calls)
 
         released.complete(Unit)
         job.join()
-
-        assertEquals(McqAnswerState.Processing, duringFlight)
-        assertEquals(1, ai.calls)
     }
 
     @Test
-    fun markDisplayed_preventsReprocessing() = runBlocking {
+    fun markDisplayed_preventsReprocessing() = runTest {
         val ai = FakeAiClient(answer = SampleAnswer)
         val pipeline = pipeline(ai = ai)
 
         pipeline.markDisplayed(QUESTION)
-        val result = pipeline.processFrame { QUESTION }
+        pipeline.processFrame { QUESTION }
 
-        assertEquals(McqAnswerState.Waiting, result)
+        assertEquals(McqAnswerState.Waiting, pipeline.state.value)
+        assertEquals(0, ai.calls)
+    }
+
+    @Test
+    fun restore_seedsStateAndPreventsReprocessing() = runTest {
+        val ai = FakeAiClient(answer = SampleAnswer)
+        val pipeline = pipeline(ai = ai)
+
+        pipeline.restore(McqAnswerState.Ready(SampleAnswer))
+        pipeline.processFrame { QUESTION }
+
+        val ready = pipeline.state.value as McqAnswerState.Ready
+        assertEquals(SampleAnswer.answer, ready.answer.answer)
         assertEquals(0, ai.calls)
     }
 
@@ -217,21 +252,26 @@ class McqSolverPipelineTest {
     private class FakeAiClient(
         var answer: McqAnswer = McqAnswer("q", "a", 1.0, "e"),
         var error: Exception? = null,
-        var onSolveStart: (suspend () -> Unit)? = null,
+        var yieldBetweenEmissions: Boolean = false,
+        var onStreamStart: (suspend () -> Unit)? = null,
     ) : McqAiClient {
         var calls = 0
 
-        override suspend fun solve(question: String, options: List<String>): McqAnswer {
+        override fun stream(question: String, options: List<String>): Flow<McqAiEvent> = flow {
             calls++
-            onSolveStart?.invoke()
+            onStreamStart?.invoke()
             error?.let { throw it }
-            return answer.copy(question = question)
+            emit(McqAiEvent.Text("Paris is "))
+            if (yieldBetweenEmissions) yield()
+            emit(McqAiEvent.Text("correct."))
+            if (yieldBetweenEmissions) yield()
+            emit(McqAiEvent.Answer(answer.copy(question = question)))
         }
     }
 
     private companion object {
         val SampleAnswer = McqAnswer(
-            question = "q",
+            question = "Which of the following is the capital of France?",
             answer = "C. Paris",
             confidence = 0.98,
             explanation = "Paris is the capital of France.",

@@ -4,7 +4,7 @@ import org.json.JSONException
 import org.json.JSONObject
 
 const val OLLAMA_BASE_URL = "http://10.0.2.2:11434"
-const val OLLAMA_MODEL = "llama3"
+const val OLLAMA_MODEL = "qwen2.5:7b"
 
 data class OllamaAnswer(
     val answer: String,

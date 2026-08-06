@@ -3,16 +3,22 @@ package com.exammate.mcq
 import android.graphics.Bitmap
 import android.os.SystemClock
 import com.exammate.mcq.ai.McqAiClient
+import com.exammate.mcq.ai.McqAiEvent
 import com.exammate.mcq.ocr.OcrService
 import com.exammate.mcq.parse.McqQuestionParser
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 
 interface McqPipeline {
-    val initialState: McqAnswerState
+    val state: StateFlow<McqAnswerState>
 
-    suspend fun onFrame(bitmap: Bitmap): McqAnswerState
+    suspend fun onFrame(bitmap: Bitmap)
 
     fun markDisplayed(text: String) = Unit
+
+    fun restore(state: McqAnswerState) = Unit
 }
 
 class McqSolverPipeline(
@@ -23,48 +29,63 @@ class McqSolverPipeline(
     private val currentTimeMillis: () -> Long = { SystemClock.elapsedRealtime() },
 ) : McqPipeline {
 
-    override val initialState: McqAnswerState = McqAnswerState.Waiting
-
     private val mutex = Mutex()
-    private var state: McqAnswerState = McqAnswerState.Waiting
-    private var lastProcessedText: String? = null
+    private val _state = MutableStateFlow<McqAnswerState>(McqAnswerState.Waiting)
+    override val state: StateFlow<McqAnswerState> = _state.asStateFlow()
+
+    private var lastProcessedStem: String? = null
     private var lastProcessedTime: Long = 0L
 
-    override suspend fun onFrame(bitmap: Bitmap): McqAnswerState =
+    override suspend fun onFrame(bitmap: Bitmap) {
         processFrame { ocr.recognize(bitmap) }
+    }
 
-    internal suspend fun processFrame(produceText: suspend () -> String): McqAnswerState {
-        if (isThrottled()) return state
-        if (!mutex.tryLock()) return state
+    internal suspend fun processFrame(produceText: suspend () -> String) {
+        if (isThrottled()) return
+        if (!mutex.tryLock()) return
         try {
             lastProcessedTime = currentTimeMillis()
-            return consume(produceText())
-        } catch (e: Exception) {
-            return state
+            consume(produceText())
+        } catch (_: Exception) {
         } finally {
             mutex.unlock()
         }
     }
 
     override fun markDisplayed(text: String) {
-        lastProcessedText = parser.normalize(text)
+        lastProcessedStem = parser.parse(text)?.let { parser.normalize(it.question) }
+            ?: parser.normalize(text)
     }
 
-    private suspend fun consume(text: String): McqAnswerState {
-        val normalized = parser.normalize(text)
-        if (normalized.isEmpty()) return state
-        if (normalized == lastProcessedText) return state
-        val parsed = parser.parse(normalized) ?: return state
-        val previous = state
-        if (previous !is McqAnswerState.Ready) state = McqAnswerState.Processing
-        return try {
-            val answer = aiClient.solve(parsed.question, parsed.options)
-            lastProcessedText = normalized
-            state = McqAnswerState.Ready(answer)
-            state
-        } catch (e: Exception) {
-            state = previous
-            state
+    override fun restore(state: McqAnswerState) {
+        _state.value = state
+        if (state is McqAnswerState.Ready) markDisplayed(state.answer.question)
+    }
+
+    private suspend fun consume(text: String) {
+        val parsed = parser.parse(text) ?: return
+        val stem = parser.normalize(parsed.question)
+        if (stem == lastProcessedStem) return
+        val previous = _state.value
+        if (previous !is McqAnswerState.Ready) _state.value = McqAnswerState.Processing
+        try {
+            val question = parsed.question
+            val options = parsed.options
+            var partialText = ""
+            aiClient.stream(question, options).collect { event ->
+                when (event) {
+                    is McqAiEvent.Text -> {
+                        partialText += event.text
+                        _state.value = McqAnswerState.Streaming(partialText)
+                    }
+                    is McqAiEvent.Answer -> {
+                        lastProcessedStem = stem
+                        _state.value = McqAnswerState.Ready(event.answer)
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            _state.value = previous
         }
     }
 

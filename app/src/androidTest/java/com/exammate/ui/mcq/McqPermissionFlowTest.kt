@@ -20,6 +20,8 @@ import com.exammate.mcq.McqAnswerState
 import com.exammate.mcq.McqPipeline
 import com.exammate.mcq.ScreenCaptureRequester
 import com.exammate.mcq.ScreenCaptureResult
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -251,9 +253,11 @@ class McqPermissionFlowTest {
     }
 
     private class FakePipeline(
-        override val initialState: McqAnswerState,
+        initial: McqAnswerState,
     ) : McqPipeline {
-        override suspend fun onFrame(bitmap: Bitmap): McqAnswerState = initialState
+        override val state: StateFlow<McqAnswerState> = MutableStateFlow(initial)
+
+        override suspend fun onFrame(bitmap: Bitmap) = Unit
     }
 
     private companion object {

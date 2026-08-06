@@ -101,7 +101,7 @@ fun McqSolverScreen(
     var screenCaptureDenied by rememberSaveable { mutableStateOf(false) }
     var settingsOpened by remember { mutableStateOf(false) }
     var answerState by rememberSaveable(stateSaver = McqAnswerStateSaver) {
-        mutableStateOf(effectivePipeline.initialState)
+        mutableStateOf(McqAnswerState.Waiting)
     }
 
     val onCameraResult: (Boolean) -> Unit = { granted ->
@@ -176,9 +176,8 @@ fun McqSolverScreen(
 
     if (captureActive) {
         LaunchedEffect(effectivePipeline) {
-            (answerState as? McqAnswerState.Ready)?.let { ready ->
-                effectivePipeline.markDisplayed(ready.answer.question)
-            }
+            effectivePipeline.restore(answerState)
+            effectivePipeline.state.collect { answerState = it }
         }
     }
 
@@ -214,7 +213,7 @@ fun McqSolverScreen(
                                 CameraPreview(
                                     modifier = Modifier.fillMaxSize().testTag(CAMERA_PREVIEW_TAG),
                                     onFrame = { bitmap ->
-                                        captureScope.launch { answerState = effectivePipeline.onFrame(bitmap) }
+                                        captureScope.launch { effectivePipeline.onFrame(bitmap) }
                                     },
                                 )
                                 Text(
