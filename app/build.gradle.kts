@@ -53,10 +53,13 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.mlkit.text.recognition)
+    implementation(libs.okhttp)
 
     debugImplementation(libs.androidx.ui.tooling)
 
     testImplementation(libs.junit)
+    testImplementation(libs.mockwebserver3)
 
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
