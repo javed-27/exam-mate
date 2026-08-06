@@ -60,7 +60,7 @@ fun CameraPreview(
                             .build()
                             .also { it.setSurfaceProvider(surfaceProvider) }
                         val imageAnalysis = ImageAnalysis.Builder()
-                            .setTargetResolution(Size(1280, 720))
+                            .setTargetResolution(Size(1920, 1080))
                             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                             .build()
                         imageAnalysis.setAnalyzer(analysisExecutor, ImageAnalyzer(frameCallback))
@@ -101,6 +101,7 @@ private class ImageAnalyzer(
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
         imageProxy.close()
         val rotated = if (rotationDegrees == 0) bitmap else rotate(bitmap, rotationDegrees)
+        Log.d(TAG, "frame ${rotated.width}x${rotated.height} rot=$rotationDegrees")
         frameCallback.callback?.invoke(rotated)
     }
 

@@ -74,6 +74,67 @@ class McqQuestionParserTest {
     }
 
     @Test
+    fun parsesBulletedOptions() {
+        val parsed = McqQuestionParser.parse(
+            """
+            When you want to eat chocolate, what brand do you buy?
+            • Hershey
+            • Mars
+            • Twix
+            • Whittaker's
+            """.trimIndent(),
+        )
+
+        assertEquals("When you want to eat chocolate, what brand do you buy?", parsed?.question)
+        assertEquals(
+            listOf("• Hershey", "• Mars", "• Twix", "• Whittaker's"),
+            parsed?.options,
+        )
+    }
+
+    @Test
+    fun parsesRadioGlyphOptions_readAsLetterO() {
+        val parsed = McqQuestionParser.parse(
+            """
+            When you want to eat chocolate, what brand do you buy?
+            O Hershey
+            O Mars
+            O Twix
+            O Nestlé
+            """.trimIndent(),
+        )
+
+        assertEquals("When you want to eat chocolate, what brand do you buy?", parsed?.question)
+        assertEquals(
+            listOf("O Hershey", "O Mars", "O Twix", "O Nestlé"),
+            parsed?.options,
+        )
+    }
+
+    @Test
+    fun stripsUiChromeFromStem_beforeOptions() {
+        val parsed = McqQuestionParser.parse(
+            """
+            <Back
+            Pick 1
+            Next>
+            When you want to eat chocolate, what brand
+            do you buy?
+            O Hershey
+            O Mars
+            O Twix
+            O Nestlé
+            """.trimIndent(),
+        )
+
+        assertEquals(
+            "When you want to eat chocolate, what brand do you buy?",
+            parsed?.question,
+        )
+        assertEquals(4, parsed?.options?.size)
+    }
+
+    @Test
     fun missingOptions_returnsNull() {
         assertNull(McqQuestionParser.parse("A sentence with no options."))
         assertNull(McqQuestionParser.parse("What is the capital?\nA. Only one option"))

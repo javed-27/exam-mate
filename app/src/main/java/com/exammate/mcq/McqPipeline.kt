@@ -2,6 +2,7 @@ package com.exammate.mcq
 
 import android.graphics.Bitmap
 import android.os.SystemClock
+import android.util.Log
 import com.exammate.mcq.ai.McqAiClient
 import com.exammate.mcq.ai.McqAiEvent
 import com.exammate.mcq.ocr.OcrService
@@ -46,7 +47,8 @@ class McqSolverPipeline(
         try {
             lastProcessedTime = currentTimeMillis()
             consume(produceText())
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.d(TAG, "Frame processing failed", e)
         } finally {
             mutex.unlock()
         }
@@ -63,9 +65,18 @@ class McqSolverPipeline(
     }
 
     private suspend fun consume(text: String) {
-        val parsed = parser.parse(text) ?: return
+        val normalized = parser.normalize(text)
+        Log.d(TAG, "OCR text: ${normalized.take(600)}")
+        val parsed = parser.parse(text) ?: run {
+            Log.d(TAG, "Parse failed: no >=2 lettered/numbered option lines")
+            return
+        }
         val stem = parser.normalize(parsed.question)
-        if (stem == lastProcessedStem) return
+        Log.d(TAG, "Parsed stem: $stem")
+        if (stem == lastProcessedStem) {
+            Log.d(TAG, "Dedupe: stem already processed, skipping")
+            return
+        }
         val previous = _state.value
         if (previous !is McqAnswerState.Ready) _state.value = McqAnswerState.Processing
         try {
@@ -80,15 +91,21 @@ class McqSolverPipeline(
                     }
                     is McqAiEvent.Answer -> {
                         lastProcessedStem = stem
+                        Log.d(TAG, "Answer ready: ${event.answer.answer}")
                         _state.value = McqAnswerState.Ready(event.answer)
                     }
                 }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.d(TAG, "AI stream failed", e)
             _state.value = previous
         }
     }
 
     private fun isThrottled(): Boolean =
         currentTimeMillis() - lastProcessedTime < minFrameIntervalMillis
+
+    private companion object {
+        const val TAG = "McqPipeline"
+    }
 }

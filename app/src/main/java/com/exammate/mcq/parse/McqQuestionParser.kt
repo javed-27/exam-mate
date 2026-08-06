@@ -9,6 +9,10 @@ object McqQuestionParser {
 
     private val letteredOption = Regex("""^([A-Ha-h])[:.)]\s+(.+)$""")
     private val numberedOption = Regex("""^(\d{1,2})[:.)]\s+(.+)$""")
+    private val bulletedOption = Regex("""^([•◦▪▫‣»·*\-–—])\s*(.+)$""")
+    private val radioOption = Regex("""^[Oo]\s+[A-Za-z].+$""")
+    private val chromeLine = Regex("""(?i)^(back|next|pick \d+|select \d+|choose \d+|question \d+|save|cancel|skip|submit|loading)\b""")
+    private val navMarker = Regex("""[<>«»]""")
 
     fun normalize(text: String): String =
         text.lines()
@@ -21,16 +25,15 @@ object McqQuestionParser {
         if (normalized.isEmpty()) return null
         val lines = normalized.split("\n")
 
-        val lettered = optionLines(lines, letteredOption)
-        val numbered = optionLines(lines, numberedOption)
-        val selected = when {
-            lettered.size >= 2 -> lettered
-            numbered.size >= 2 -> numbered
-            else -> return null
-        }
+        val selected = listOf(
+            optionLines(lines, letteredOption),
+            optionLines(lines, numberedOption),
+            optionLines(lines, bulletedOption),
+            optionLines(lines, radioOption),
+        ).firstOrNull { it.size >= 2 } ?: return null
 
         val firstOptionIndex = selected.first().index
-        val stem = lines.take(firstOptionIndex)
+        val stem = stripLeadingChrome(lines.take(firstOptionIndex))
             .filter { it.isNotEmpty() }
             .joinToString(" ")
             .trim()
@@ -47,5 +50,10 @@ object McqQuestionParser {
     private fun optionLines(lines: List<String>, regex: Regex): List<OptionLine> =
         lines.mapIndexedNotNull { index, line ->
             if (regex.matches(line)) OptionLine(index, line) else null
+        }
+
+    private fun stripLeadingChrome(lines: List<String>): List<String> =
+        lines.dropWhile { line ->
+            line.contains(navMarker) || chromeLine.matches(line)
         }
 }
