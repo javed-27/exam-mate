@@ -1,10 +1,12 @@
 package com.exammate.mcq.ai
 
+import com.exammate.BuildConfig
 import org.json.JSONException
 import org.json.JSONObject
 
-const val OLLAMA_BASE_URL = "http://10.0.2.2:11434"
-const val OLLAMA_MODEL = "qwen2.5:7b"
+val OLLAMA_BASE_URL: String = BuildConfig.OLLAMA_BASE_URL
+val OLLAMA_MODEL: String = BuildConfig.OLLAMA_MODEL
+val OLLAMA_API_KEY: String = BuildConfig.OLLAMA_API_KEY
 
 data class OllamaAnswer(
     val answer: String,

@@ -26,9 +26,11 @@ class OllamaMcqClientTest {
         server.close()
     }
 
-    private fun client(): OllamaMcqClient =
+    private fun client(apiKey: String = ""): OllamaMcqClient =
         OllamaMcqClient(
             baseUrl = server.url("/").toString(),
+            model = "qwen2.5:7b",
+            apiKey = apiKey,
             client = OkHttpClient(),
         )
 
@@ -68,6 +70,48 @@ class OllamaMcqClientTest {
         assertEquals("/api/generate", recorded.url.encodedPath)
         assertTrue(recorded.body?.utf8()?.contains("\"stream\":true") == true)
         assertTrue(recorded.body?.utf8()?.contains("\"model\":\"qwen2.5:7b\"") == true)
+    }
+
+    @Test
+    fun stream_sendsBearerAuthHeader_whenApiKeyProvided() = runBlocking {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .body(buildString {
+                    appendLine("""{"response":"{\"answer\": \"C. Paris\", \"confidence\": 0.98, \"explanation\": \"Paris is the capital of France.\"}","done":false}""")
+                    appendLine("""{"response":"","done":true}""")
+                })
+                .build(),
+        )
+
+        client(apiKey = "sk-test-123").stream(
+            question = "Which of the following is the capital of France?",
+            options = listOf("A. Berlin", "B. Madrid", "C. Paris", "D. Rome"),
+        ).toList()
+
+        val recorded = server.takeRequest()
+        assertEquals("Bearer sk-test-123", recorded.headers["Authorization"])
+    }
+
+    @Test
+    fun stream_omitsAuthHeader_whenNoApiKey() = runBlocking {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .body(buildString {
+                    appendLine("""{"response":"{\"answer\": \"C. Paris\", \"confidence\": 0.98, \"explanation\": \"Paris is the capital of France.\"}","done":false}""")
+                    appendLine("""{"response":"","done":true}""")
+                })
+                .build(),
+        )
+
+        client().stream(
+            question = "Which of the following is the capital of France?",
+            options = listOf("A. Berlin", "B. Madrid", "C. Paris", "D. Rome"),
+        ).toList()
+
+        val recorded = server.takeRequest()
+        assertEquals(null, recorded.headers["Authorization"])
     }
 
     @Test

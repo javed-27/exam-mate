@@ -3,6 +3,16 @@ plugins {
     alias(libs.plugins.compose.compiler)
 }
 
+import java.util.Properties
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+
+fun aiConfig(name: String, default: String): String =
+    System.getenv(name) ?: localProperties.getProperty(name) ?: default
+
 android {
     namespace = "com.exammate"
     compileSdk = 37
@@ -15,10 +25,15 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "OLLAMA_BASE_URL", "\"${aiConfig("OLLAMA_BASE_URL", "https://ollama.com")}\"")
+        buildConfigField("String", "OLLAMA_MODEL", "\"${aiConfig("OLLAMA_MODEL", "gpt-oss:20b")}\"")
+        buildConfigField("String", "OLLAMA_API_KEY", "\"${aiConfig("OLLAMA_API_KEY", "")}\"")
     }
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     compileOptions {

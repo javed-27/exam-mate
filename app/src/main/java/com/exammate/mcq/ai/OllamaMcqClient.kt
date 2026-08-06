@@ -18,6 +18,7 @@ import org.json.JSONObject
 class OllamaMcqClient(
     private val baseUrl: String = OLLAMA_BASE_URL,
     private val model: String = OLLAMA_MODEL,
+    private val apiKey: String = OLLAMA_API_KEY,
     private val client: OkHttpClient = defaultClient(),
 ) : McqAiClient {
 
@@ -28,10 +29,13 @@ class OllamaMcqClient(
             .put("stream", true)
             .toString()
 
-        val request = Request.Builder()
+        val requestBuilder = Request.Builder()
             .url("${baseUrl.trimEnd('/')}/api/generate")
             .post(payload.toRequestBody("application/json".toMediaType()))
-            .build()
+        if (apiKey.isNotBlank()) {
+            requestBuilder.header("Authorization", "Bearer $apiKey")
+        }
+        val request = requestBuilder.build()
 
         val call = client.newCall(request)
         call.enqueue(object : Callback {
