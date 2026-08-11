@@ -11,8 +11,11 @@ object McqQuestionParser {
     private val numberedOption = Regex("""^(\d{1,2})[:.)]\s+(.+)$""")
     private val bulletedOption = Regex("""^([•◦▪▫‣»·*\-–—])\s*(.+)$""")
     private val radioOption = Regex("""^[Oo]\s+[A-Za-z].+$""")
-    private val chromeLine = Regex("""(?i)^(back|next|pick \d+|select \d+|choose \d+|question \d+|save|cancel|skip|submit|loading)\b""")
+    private val chromeLine = Regex(
+        """(?i)^(back|next|previous|prev|pick \d+|select \d+|choose \d+|question \d+|save|cancel|skip|submit|loading|mark(ed)? for review|descriptive part|type\b|(e\s+)?attach|scan(ning)? the qr|white plain sheets|handwritten answer sheets|write your answer|esc|f\d{1,2})\b""",
+    )
     private val navMarker = Regex("""[<>«»]""")
+    private val timerToken = Regex("""\b\d{1,2}:\d{2}(?::\d{2})?\b""")
 
     fun normalize(text: String): String =
         text.lines()
@@ -20,8 +23,11 @@ object McqQuestionParser {
             .joinToString("\n")
             .trim()
 
+    fun sanitize(text: String): String =
+        normalize(text.replace(timerToken, ""))
+
     fun parse(ocrText: String): ParsedMcq? {
-        val normalized = normalize(ocrText)
+        val normalized = sanitize(ocrText)
         if (normalized.isEmpty()) return null
         val lines = normalized.split("\n")
 
@@ -54,6 +60,6 @@ object McqQuestionParser {
 
     private fun stripLeadingChrome(lines: List<String>): List<String> =
         lines.dropWhile { line ->
-            line.contains(navMarker) || chromeLine.matches(line)
+            line.contains(navMarker) || chromeLine.find(line)?.range?.first == 0
         }
 }

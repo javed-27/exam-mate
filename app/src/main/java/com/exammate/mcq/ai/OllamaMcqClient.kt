@@ -6,6 +6,8 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
@@ -20,9 +22,32 @@ class OllamaMcqClient(
     private val model: String = OLLAMA_MODEL,
     private val apiKey: String = OLLAMA_API_KEY,
     private val client: OkHttpClient = defaultClient(),
+    private val fallbackBaseUrls: List<String> = DEFAULT_FALLBACK_BASE_URLS,
 ) : McqAiClient {
 
-    override fun stream(question: String, options: List<String>): Flow<McqAiEvent> = callbackFlow {
+    override fun stream(question: String, options: List<String>): Flow<McqAiEvent> = flow {
+        val candidates = buildList {
+            add(baseUrl.trimEnd('/'))
+            addAll(fallbackBaseUrls.map { it.trimEnd('/') })
+        }.distinct()
+
+        var lastError: Exception? = null
+        for (candidate in candidates) {
+            try {
+                emitAll(streamFrom(candidate, question, options))
+                return@flow
+            } catch (e: Exception) {
+                lastError = e
+            }
+        }
+        throw lastError ?: IOException("Ollama unreachable on all hosts: $candidates")
+    }
+
+    private fun streamFrom(
+        baseUrl: String,
+        question: String,
+        options: List<String>,
+    ): Flow<McqAiEvent> = callbackFlow {
         val payload = JSONObject()
             .put("model", model)
             .put("prompt", buildMcqPrompt(question, options))
@@ -86,6 +111,9 @@ class OllamaMcqClient(
         )
 
     private companion object {
+        val DEFAULT_FALLBACK_BASE_URLS: List<String> =
+            listOf("http://localhost:11434", "http://10.0.2.2:11434")
+
         fun defaultClient(): OkHttpClient =
             OkHttpClient.Builder()
                 .connectTimeout(10, TimeUnit.SECONDS)

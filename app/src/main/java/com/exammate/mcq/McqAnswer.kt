@@ -11,7 +11,8 @@ data class McqAnswer(
 )
 
 sealed interface McqAnswerState {
-    data object Waiting : McqAnswerState
+    data object WaitingForOcr : McqAnswerState
+    data class Unparsed(val ocrText: String) : McqAnswerState
     data object Processing : McqAnswerState
     data class Streaming(val partialText: String) : McqAnswerState
     data class Ready(val answer: McqAnswer) : McqAnswerState
@@ -20,7 +21,8 @@ sealed interface McqAnswerState {
 val McqAnswerStateSaver: Saver<McqAnswerState, Any> = listSaver(
     save = { state ->
         when (state) {
-            McqAnswerState.Waiting -> listOf("waiting")
+            McqAnswerState.WaitingForOcr -> listOf("waiting")
+            is McqAnswerState.Unparsed -> listOf("unparsed", state.ocrText)
             McqAnswerState.Processing -> listOf("processing")
             is McqAnswerState.Streaming -> listOf("processing")
             is McqAnswerState.Ready -> listOf(
@@ -34,7 +36,8 @@ val McqAnswerStateSaver: Saver<McqAnswerState, Any> = listSaver(
     },
     restore = { saved ->
         when (saved[0]) {
-            "waiting" -> McqAnswerState.Waiting
+            "waiting" -> McqAnswerState.WaitingForOcr
+            "unparsed" -> McqAnswerState.Unparsed(saved[1] as String)
             "processing" -> McqAnswerState.Processing
             "ready" -> McqAnswerState.Ready(
                 McqAnswer(
@@ -44,7 +47,7 @@ val McqAnswerStateSaver: Saver<McqAnswerState, Any> = listSaver(
                     explanation = saved[4] as String,
                 ),
             )
-            else -> McqAnswerState.Waiting
+            else -> McqAnswerState.WaitingForOcr
         }
     },
 )

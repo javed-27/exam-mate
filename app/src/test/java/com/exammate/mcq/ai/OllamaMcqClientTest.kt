@@ -1,6 +1,7 @@
 package com.exammate.mcq.ai
 
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import mockwebserver3.MockResponse
@@ -32,6 +33,7 @@ class OllamaMcqClientTest {
             model = "qwen2.5:7b",
             apiKey = apiKey,
             client = OkHttpClient(),
+            fallbackBaseUrls = emptyList(),
         )
 
     @Test
@@ -147,6 +149,55 @@ class OllamaMcqClientTest {
         }
 
         assertTrue(thrown is Exception)
+    }
+
+    @Test
+    fun stream_fallsBackToNextHost_whenPrimaryUnreachable() = runBlocking {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .body(buildString {
+                    appendLine("""{"response":"{\"answer\": \"C. Paris\", \"confidence\": 0.98, \"explanation\": \"Paris is the capital of France.\"}","done":false}""")
+                    appendLine("""{"response":"","done":true}""")
+                })
+                .build(),
+        )
+
+        val events = OllamaMcqClient(
+            baseUrl = "http://127.0.0.1:1",
+            model = "qwen2.5:7b",
+            client = OkHttpClient.Builder()
+                .connectTimeout(2, TimeUnit.SECONDS)
+                .readTimeout(2, TimeUnit.SECONDS)
+                .build(),
+            fallbackBaseUrls = listOf(server.url("/").toString()),
+        ).stream(
+            question = "Which of the following is the capital of France?",
+            options = listOf("A. Berlin", "B. Madrid", "C. Paris", "D. Rome"),
+        ).toList()
+
+        val answer = (events.last() as McqAiEvent.Answer).answer
+        assertEquals("C. Paris", answer.answer)
+    }
+
+    @Test
+    fun stream_allHostsUnreachable_throws() = runBlocking {
+        val thrown = try {
+            OllamaMcqClient(
+                baseUrl = "http://127.0.0.1:1",
+                model = "qwen2.5:7b",
+                client = OkHttpClient.Builder()
+                    .connectTimeout(2, TimeUnit.SECONDS)
+                    .readTimeout(2, TimeUnit.SECONDS)
+                    .build(),
+                fallbackBaseUrls = listOf("http://127.0.0.1:1"),
+            ).stream("Q?", listOf("A. x", "B. y")).toList()
+            null
+        } catch (e: Exception) {
+            e
+        }
+
+        assertTrue(thrown is IOException)
     }
 
     @Test

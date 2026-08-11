@@ -10,8 +10,17 @@ class McqAnswerStateSaverTest {
 
     @Test
     fun waiting_roundTrips() {
-        val saved = scope.saveState(McqAnswerState.Waiting)
-        assertEquals(McqAnswerState.Waiting, McqAnswerStateSaver.restore(saved))
+        val saved = scope.saveState(McqAnswerState.WaitingForOcr)
+        assertEquals(McqAnswerState.WaitingForOcr, McqAnswerStateSaver.restore(saved))
+    }
+
+    @Test
+    fun unparsed_roundTrips() {
+        val state = McqAnswerState.Unparsed("Just a sentence without any options")
+
+        val saved = scope.saveState(state)
+
+        assertEquals(state, McqAnswerStateSaver.restore(saved))
     }
 
     @Test
@@ -37,10 +46,10 @@ class McqAnswerStateSaverTest {
     }
 
     @Test
-    fun unknownKey_restoresToWaiting() {
+    fun unknownKey_restoresToWaitingForOcr() {
         val restored = McqAnswerStateSaver.restore(listOf("unknown"))
 
-        assertEquals(McqAnswerState.Waiting, restored)
+        assertEquals(McqAnswerState.WaitingForOcr, restored)
     }
 
     private fun SaverScope.saveState(state: McqAnswerState): Any =

@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.provider.Settings
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -101,7 +102,7 @@ fun McqSolverScreen(
     var screenCaptureDenied by rememberSaveable { mutableStateOf(false) }
     var settingsOpened by remember { mutableStateOf(false) }
     var answerState by rememberSaveable(stateSaver = McqAnswerStateSaver) {
-        mutableStateOf(McqAnswerState.Waiting)
+        mutableStateOf(McqAnswerState.WaitingForOcr)
     }
 
     val onCameraResult: (Boolean) -> Unit = { granted ->
@@ -213,6 +214,7 @@ fun McqSolverScreen(
                                 CameraPreview(
                                     modifier = Modifier.fillMaxSize().testTag(CAMERA_PREVIEW_TAG),
                                     onFrame = { bitmap ->
+                                        Log.d("McqSolverScreen", "frame received ${bitmap.width}x${bitmap.height}")
                                         captureScope.launch { effectivePipeline.onFrame(bitmap) }
                                     },
                                 )

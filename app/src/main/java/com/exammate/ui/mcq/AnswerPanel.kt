@@ -38,12 +38,13 @@ fun AnswerPanel(
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         when (state) {
-            McqAnswerState.Waiting -> StatusText("Waiting for question…")
+            McqAnswerState.WaitingForOcr -> StatusText("Waiting for OCR…")
+            is McqAnswerState.Unparsed -> UnparsedDebug(state.ocrText)
             McqAnswerState.Processing -> Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Analysing question…",
+                    text = "Waiting for LLM…",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -93,6 +94,30 @@ fun AnswerPanel(
             }
         }
     }
+}
+
+@Composable
+private fun UnparsedDebug(ocrText: String) {
+    Text(
+        text = "Question not recognised",
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.error,
+    )
+    Text(
+        text = "No 2+ options found in captured text. Raw OCR for debugging:",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 4.dp),
+    )
+    Text(
+        text = ocrText.ifBlank { "(empty)" },
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .padding(top = 8.dp)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(8.dp),
+    )
 }
 
 @Composable

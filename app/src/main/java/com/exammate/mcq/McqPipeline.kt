@@ -31,19 +31,29 @@ class McqSolverPipeline(
 ) : McqPipeline {
 
     private val mutex = Mutex()
-    private val _state = MutableStateFlow<McqAnswerState>(McqAnswerState.Waiting)
+    private val _state = MutableStateFlow<McqAnswerState>(McqAnswerState.WaitingForOcr)
     override val state: StateFlow<McqAnswerState> = _state.asStateFlow()
 
     private var lastProcessedStem: String? = null
     private var lastProcessedTime: Long = 0L
 
+    internal var framesDelivered: Int = 0
+        private set
+
     override suspend fun onFrame(bitmap: Bitmap) {
+        framesDelivered++
         processFrame { ocr.recognize(bitmap) }
     }
 
     internal suspend fun processFrame(produceText: suspend () -> String) {
-        if (isThrottled()) return
-        if (!mutex.tryLock()) return
+        if (isThrottled()) {
+            Log.d(TAG, "Frame skipped: throttled")
+            return
+        }
+        if (!mutex.tryLock()) {
+            Log.d(TAG, "Frame skipped: pipeline busy (single-flight)")
+            return
+        }
         try {
             lastProcessedTime = currentTimeMillis()
             consume(produceText())
@@ -56,7 +66,7 @@ class McqSolverPipeline(
 
     override fun markDisplayed(text: String) {
         lastProcessedStem = parser.parse(text)?.let { parser.normalize(it.question) }
-            ?: parser.normalize(text)
+            ?: parser.sanitize(text)
     }
 
     override fun restore(state: McqAnswerState) {
@@ -67,8 +77,15 @@ class McqSolverPipeline(
     private suspend fun consume(text: String) {
         val normalized = parser.normalize(text)
         Log.d(TAG, "OCR text: ${normalized.take(600)}")
+        if (normalized.isEmpty()) {
+            Log.d(TAG, "OCR returned empty text")
+        }
         val parsed = parser.parse(text) ?: run {
             Log.d(TAG, "Parse failed: no >=2 lettered/numbered option lines")
+            val current = _state.value
+            if (normalized.isNotBlank() && current !is McqAnswerState.Ready) {
+                _state.value = McqAnswerState.Unparsed(normalized.take(MAX_DEBUG_TEXT_LENGTH))
+            }
             return
         }
         val stem = parser.normalize(parsed.question)
@@ -107,5 +124,6 @@ class McqSolverPipeline(
 
     private companion object {
         const val TAG = "McqPipeline"
+        const val MAX_DEBUG_TEXT_LENGTH = 1500
     }
 }

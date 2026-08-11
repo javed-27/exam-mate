@@ -135,6 +135,101 @@ class McqQuestionParserTest {
     }
 
     @Test
+    fun stripsCountdownTimerFromStem() {
+        val parsed = McqQuestionParser.parse(
+            """
+            00:47
+            Which of the following is the capital of France?
+            A. Berlin
+            B. Madrid
+            C. Paris
+            D. Rome
+            """.trimIndent(),
+        )
+
+        assertEquals("Which of the following is the capital of France?", parsed?.question)
+        assertEquals(4, parsed?.options?.size)
+    }
+
+    @Test
+    fun timerChange_keepsStemStable() {
+        val timerA = "00:47\nWhich of the following is the capital of France?\nA. Berlin\nB. Madrid\nC. Paris\nD. Rome"
+        val timerB = "00:46\nWhich of the following is the capital of France?\nA. Berlin\nB. Madrid\nC. Paris\nD. Rome"
+
+        assertEquals(
+            McqQuestionParser.parse(timerA)?.question,
+            McqQuestionParser.parse(timerB)?.question,
+        )
+    }
+
+    @Test
+    fun sanitize_stripsTimerWithSecondsAndInlineTokens() {
+        assertEquals(
+            "Time left:\nQuestion?",
+            McqQuestionParser.sanitize("Time left: 00:01:23\n00:47 Question?"),
+        )
+    }
+
+    @Test
+    fun stripsExamPortalChromeFromStem() {
+        val parsed = McqQuestionParser.parse(
+            """
+            Descriptive Part
+            Type: 4 Answer any 2 of following [5*2=10]
+            Q.no 4.1.
+            Which of the following is the capital of France?
+            A. Berlin
+            B. Madrid
+            C. Paris
+            D. Rome
+            Previous
+            Next
+            Mark for review
+            """.trimIndent(),
+        )
+
+        assertEquals("Q.no 4.1. Which of the following is the capital of France?", parsed?.question)
+        assertEquals(listOf("A. Berlin", "B. Madrid", "C. Paris", "D. Rome"), parsed?.options)
+    }
+
+    @Test
+    fun stripsKeyboardKeysFromStem() {
+        val parsed = McqQuestionParser.parse(
+            """
+            esc
+            F1
+            F2
+            Which of the following is the capital of France?
+            A. Berlin
+            B. Madrid
+            C. Paris
+            D. Rome
+            """.trimIndent(),
+        )
+
+        assertEquals("Which of the following is the capital of France?", parsed?.question)
+        assertEquals(4, parsed?.options?.size)
+    }
+
+    @Test
+    fun stripsStrayAttachPrefixFromStem() {
+        val parsed = McqQuestionParser.parse(
+            """
+            e Attach
+            Scan the QR Code through any QR scanning app
+            Which of the following is the capital of France?
+            A. Berlin
+            B. Madrid
+            C. Paris
+            D. Rome
+            """.trimIndent(),
+        )
+
+        assertEquals("Which of the following is the capital of France?", parsed?.question)
+        assertEquals(4, parsed?.options?.size)
+    }
+
+    @Test
     fun missingOptions_returnsNull() {
         assertNull(McqQuestionParser.parse("A sentence with no options."))
         assertNull(McqQuestionParser.parse("What is the capital?\nA. Only one option"))

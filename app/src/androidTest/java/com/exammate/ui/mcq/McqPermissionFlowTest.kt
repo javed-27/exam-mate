@@ -81,13 +81,13 @@ class McqPermissionFlowTest {
             checker = FakeChecker(cameraGranted = true, accessibilityEnabled = true),
             store = FakeStore(denied = false),
             initialScreenCaptureGranted = true,
-            pipeline = FakePipeline(McqAnswerState.Waiting),
+            pipeline = FakePipeline(McqAnswerState.WaitingForOcr),
         )
 
         composeRule.onNodeWithText("Real-Time MCQ Solver").assertIsDisplayed()
         composeRule.onNodeWithText("Capturing…").assertIsDisplayed()
         composeRule.onNodeWithText("Align the question within the frame").assertIsDisplayed()
-        composeRule.onNodeWithText("Waiting for question…").assertIsDisplayed()
+        composeRule.onNodeWithText("Waiting for OCR…").assertIsDisplayed()
         composeRule.onAllNodesWithTag(CAMERA_PREVIEW_TAG).assertCountEquals(1)
         composeRule.onAllNodesWithTag(ANSWER_PANEL_TAG).assertCountEquals(1)
     }
@@ -119,7 +119,7 @@ class McqPermissionFlowTest {
     }
 
     @Test
-    fun captureProcessing_showsAnalysing() {
+    fun captureProcessing_showsWaitingForLlm() {
         setContent(
             checker = FakeChecker(cameraGranted = true, accessibilityEnabled = true),
             store = FakeStore(denied = false),
@@ -127,7 +127,20 @@ class McqPermissionFlowTest {
             pipeline = FakePipeline(McqAnswerState.Processing),
         )
 
-        composeRule.onNodeWithText("Analysing question…").assertIsDisplayed()
+        composeRule.onNodeWithText("Waiting for LLM…").assertIsDisplayed()
+    }
+
+    @Test
+    fun captureUnparsed_showsDebugText() {
+        setContent(
+            checker = FakeChecker(cameraGranted = true, accessibilityEnabled = true),
+            store = FakeStore(denied = false),
+            initialScreenCaptureGranted = true,
+            pipeline = FakePipeline(McqAnswerState.Unparsed("Just a sentence without any options")),
+        )
+
+        composeRule.onNodeWithText("Question not recognised").assertIsDisplayed()
+        composeRule.onNodeWithText("Just a sentence without any options").assertIsDisplayed()
     }
 
     @Test
@@ -219,7 +232,7 @@ class McqPermissionFlowTest {
         checker: McqPermissionChecker,
         store: CameraPermissionStore,
         initialScreenCaptureGranted: Boolean = false,
-        pipeline: McqPipeline = FakePipeline(McqAnswerState.Waiting),
+        pipeline: McqPipeline = FakePipeline(McqAnswerState.WaitingForOcr),
     ) {
         composeRule.setContent {
             McqSolverScreen(

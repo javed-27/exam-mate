@@ -25,10 +25,10 @@ class McqSolverPipelineTest {
             "A. Berlin\nB. Madrid\nC. Paris\nD. Rome"
 
     @Test
-    fun initialState_isWaiting() {
+    fun initialState_isWaitingForOcr() {
         val pipeline = pipeline()
 
-        assertEquals(McqAnswerState.Waiting, pipeline.state.value)
+        assertEquals(McqAnswerState.WaitingForOcr, pipeline.state.value)
     }
 
     @Test
@@ -67,6 +67,19 @@ class McqSolverPipelineTest {
     }
 
     @Test
+    fun changingCountdownTimer_doesNotReprocess() = runTest {
+        val ai = FakeAiClient(answer = SampleAnswer)
+        val pipeline = pipeline(ai = ai)
+
+        pipeline.processFrame { "00:47\n$QUESTION" }
+        pipeline.processFrame { "00:46\n$QUESTION" }
+        pipeline.processFrame { "00:45\n$QUESTION" }
+
+        assertEquals(1, ai.calls)
+        assertTrue(pipeline.state.value is McqAnswerState.Ready)
+    }
+
+    @Test
     fun changedQuestion_reprocesses() = runTest {
         val ai = FakeAiClient(answer = SampleAnswer)
         val pipeline = pipeline(ai = ai)
@@ -84,19 +97,32 @@ class McqSolverPipelineTest {
 
         pipeline.processFrame { "   \n  " }
 
-        assertEquals(McqAnswerState.Waiting, pipeline.state.value)
+        assertEquals(McqAnswerState.WaitingForOcr, pipeline.state.value)
         assertEquals(0, ai.calls)
     }
 
     @Test
-    fun unparseableText_doesNothing() = runTest {
+    fun unparseableText_revealsDebugText() = runTest {
         val ai = FakeAiClient()
         val pipeline = pipeline(ai = ai)
 
         pipeline.processFrame { "Just a sentence without any options" }
 
-        assertEquals(McqAnswerState.Waiting, pipeline.state.value)
+        val unparsed = pipeline.state.value as McqAnswerState.Unparsed
+        assertEquals("Just a sentence without any options", unparsed.ocrText)
         assertEquals(0, ai.calls)
+    }
+
+    @Test
+    fun unparseableText_afterAnswer_keepsAnswer() = runTest {
+        val ai = FakeAiClient(answer = SampleAnswer)
+        val pipeline = pipeline(ai = ai)
+
+        pipeline.processFrame { QUESTION }
+        pipeline.processFrame { "stray text with no options" }
+
+        assertTrue(pipeline.state.value is McqAnswerState.Ready)
+        assertEquals(1, ai.calls)
     }
 
     @Test
@@ -105,7 +131,7 @@ class McqSolverPipelineTest {
 
         pipeline.processFrame { throw IOException("ocr failed") }
 
-        assertEquals(McqAnswerState.Waiting, pipeline.state.value)
+        assertEquals(McqAnswerState.WaitingForOcr, pipeline.state.value)
     }
 
     @Test
@@ -135,13 +161,13 @@ class McqSolverPipelineTest {
     }
 
     @Test
-    fun aiFailure_withNoPreviousAnswer_staysWaiting() = runTest {
+    fun aiFailure_withNoPreviousAnswer_staysWaitingForOcr() = runTest {
         val ai = FakeAiClient(error = IOException("ai failed"))
         val pipeline = pipeline(ai = ai)
 
         pipeline.processFrame { QUESTION }
 
-        assertEquals(McqAnswerState.Waiting, pipeline.state.value)
+        assertEquals(McqAnswerState.WaitingForOcr, pipeline.state.value)
     }
 
     @Test
@@ -213,7 +239,7 @@ class McqSolverPipelineTest {
         pipeline.markDisplayed(QUESTION)
         pipeline.processFrame { QUESTION }
 
-        assertEquals(McqAnswerState.Waiting, pipeline.state.value)
+        assertEquals(McqAnswerState.WaitingForOcr, pipeline.state.value)
         assertEquals(0, ai.calls)
     }
 
