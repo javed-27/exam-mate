@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import com.exammate.mcq.McqAnswer
 import com.exammate.mcq.McqAnswerState
 
 internal const val ANSWER_PANEL_TAG = "answer_panel"
@@ -40,25 +41,12 @@ fun AnswerPanel(
         when (state) {
             McqAnswerState.WaitingForOcr -> StatusText("Waiting for OCR…")
             is McqAnswerState.Unparsed -> UnparsedDebug(state.ocrText)
-            McqAnswerState.Processing -> Row(verticalAlignment = Alignment.CenterVertically) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Waiting for LLM…",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            is McqAnswerState.Processing -> {
+                ProgressRow("Waiting for LLM…")
+                state.previous?.let { ReadyContent(it) }
             }
             is McqAnswerState.Streaming -> {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Generating answer…",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                ProgressRow("Generating answer…")
                 if (state.partialText.isNotBlank()) {
                     Text(
                         text = state.partialText,
@@ -67,33 +55,75 @@ fun AnswerPanel(
                         modifier = Modifier.padding(top = 8.dp),
                     )
                 }
+                state.previous?.let { ReadyContent(it) }
             }
-            is McqAnswerState.Ready -> {
-                SectionLabel("Question")
-                Text(
-                    text = state.answer.question,
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                SectionLabel("Answer")
-                Text(
-                    text = state.answer.answer,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    text = "Confidence: ${(state.answer.confidence * 100).toInt()}%",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                SectionLabel("Explanation")
-                Text(
-                    text = state.answer.explanation,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            is McqAnswerState.Ready -> ReadyContent(state.answer)
+            is McqAnswerState.Error -> ErrorContent(state.message, state.previous)
         }
     }
+}
+
+@Composable
+private fun ProgressRow(text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun ErrorContent(message: String, previous: McqAnswer?) {
+    Text(
+        text = "AI request failed",
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.error,
+    )
+    Text(
+        text = message.ifBlank { "The answer server is unreachable. Check your server URL and try again." },
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 4.dp),
+    )
+    previous?.let {
+        Text(
+            text = "Showing last known answer",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 12.dp),
+        )
+        ReadyContent(it)
+    }
+}
+
+@Composable
+private fun ReadyContent(answer: McqAnswer) {
+    SectionLabel("Question")
+    Text(
+        text = answer.question,
+        style = MaterialTheme.typography.bodyLarge,
+    )
+    SectionLabel("Answer")
+    Text(
+        text = answer.answer,
+        style = MaterialTheme.typography.titleLarge,
+        color = MaterialTheme.colorScheme.primary,
+    )
+    Text(
+        text = "Confidence: ${(answer.confidence * 100).toInt()}%",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    SectionLabel("Explanation")
+    Text(
+        text = answer.explanation,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable

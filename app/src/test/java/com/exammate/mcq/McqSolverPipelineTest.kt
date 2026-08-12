@@ -224,7 +224,7 @@ class McqSolverPipelineTest {
         now += 1000
         pipeline.processFrame { "2. What is 2 + 2?\nA. 3\nB. 4\nC. 5\nD. 6" }
 
-        assertEquals(McqAnswerState.Processing, pipeline.state.value)
+        assertEquals(McqAnswerState.Processing(previous = null), pipeline.state.value)
         assertEquals(1, ai.calls)
 
         released.complete(Unit)

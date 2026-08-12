@@ -95,7 +95,7 @@ class McqSolverPipeline(
             return
         }
         val previous = _state.value
-        if (previous !is McqAnswerState.Ready) _state.value = McqAnswerState.Processing
+        if (previous !is McqAnswerState.Ready) _state.value = McqAnswerState.Processing(previous = null)
         try {
             val question = parsed.question
             val options = parsed.options
@@ -104,7 +104,7 @@ class McqSolverPipeline(
                 when (event) {
                     is McqAiEvent.Text -> {
                         partialText += event.text
-                        _state.value = McqAnswerState.Streaming(partialText)
+                        _state.value = McqAnswerState.Streaming(previous = null, partialText)
                     }
                     is McqAiEvent.Answer -> {
                         lastProcessedStem = stem

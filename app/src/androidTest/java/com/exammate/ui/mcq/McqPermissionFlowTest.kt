@@ -124,7 +124,7 @@ class McqPermissionFlowTest {
             checker = FakeChecker(cameraGranted = true, accessibilityEnabled = true),
             store = FakeStore(denied = false),
             initialScreenCaptureGranted = true,
-            pipeline = FakePipeline(McqAnswerState.Processing),
+            pipeline = FakePipeline(McqAnswerState.Processing(previous = null)),
         )
 
         composeRule.onNodeWithText("Waiting for LLM…").assertIsDisplayed()
