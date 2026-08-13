@@ -7,21 +7,27 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextClearance
 import com.exammate.mcq.CameraPermissionStore
 import com.exammate.mcq.McqAnswer
 import com.exammate.mcq.McqAnswerState
 import com.exammate.mcq.McqPipeline
+import com.exammate.mcq.McqServerSettings
 import com.exammate.mcq.ScreenCaptureRequester
 import com.exammate.mcq.ScreenCaptureResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -228,10 +234,55 @@ class McqPermissionFlowTest {
         composeRule.runOnIdle { assertTrue(wentHome) }
     }
 
+    @Test
+    fun serverSettingsDialog_opensAndShowsCurrentValues() {
+        val settings = FakeServerSettings(
+            baseUrl = "http://192.168.1.5:11434",
+            model = "llama3",
+        )
+        setContent(
+            checker = FakeChecker(cameraGranted = true, accessibilityEnabled = true),
+            store = FakeStore(denied = false),
+            initialScreenCaptureGranted = true,
+            serverSettings = settings,
+            pipeline = FakePipeline(McqAnswerState.WaitingForOcr),
+        )
+
+        composeRule.onNodeWithContentDescription("Server settings").performClick()
+        composeRule.onNodeWithText("Server settings").assertIsDisplayed()
+        composeRule.onNodeWithTag(SERVER_URL_FIELD_TAG).assertTextContains("http://192.168.1.5:11434")
+        composeRule.onNodeWithTag(MODEL_FIELD_TAG).assertTextContains("llama3")
+    }
+
+    @Test
+    fun serverSettingsDialog_editsAndSavesPersist() {
+        val settings = FakeServerSettings()
+        setContent(
+            checker = FakeChecker(cameraGranted = true, accessibilityEnabled = true),
+            store = FakeStore(denied = false),
+            initialScreenCaptureGranted = true,
+            serverSettings = settings,
+            pipeline = FakePipeline(McqAnswerState.WaitingForOcr),
+        )
+
+        composeRule.onNodeWithContentDescription("Server settings").performClick()
+        composeRule.onNodeWithTag(SERVER_URL_FIELD_TAG).performTextClearance()
+        composeRule.onNodeWithTag(SERVER_URL_FIELD_TAG).performTextInput("http://192.168.1.50:11434")
+        composeRule.onNodeWithTag(MODEL_FIELD_TAG).performTextClearance()
+        composeRule.onNodeWithTag(MODEL_FIELD_TAG).performTextInput("llama3")
+        composeRule.onNodeWithText("Save").performClick()
+
+        composeRule.runOnIdle {
+            assertEquals("http://192.168.1.50:11434", settings.baseUrl)
+            assertEquals("llama3", settings.model)
+        }
+    }
+
     private fun setContent(
         checker: McqPermissionChecker,
         store: CameraPermissionStore,
         initialScreenCaptureGranted: Boolean = false,
+        serverSettings: McqServerSettings? = null,
         pipeline: McqPipeline = FakePipeline(McqAnswerState.WaitingForOcr),
     ) {
         composeRule.setContent {
@@ -241,6 +292,7 @@ class McqPermissionFlowTest {
                 checker = checker,
                 cameraPermissionStore = store,
                 screenCaptureRequester = FakeRequester(),
+                serverSettings = serverSettings,
                 initialScreenCaptureGranted = initialScreenCaptureGranted,
                 pipeline = pipeline,
             )
@@ -259,6 +311,11 @@ class McqPermissionFlowTest {
         override var cameraDenied: Boolean = denied
     }
 
+    private class FakeServerSettings(
+        override var baseUrl: String = "http://10.136.124.224:11434",
+        override var model: String = "gemma4",
+    ) : McqServerSettings
+
     private class FakeRequester : ScreenCaptureRequester {
         override fun createScreenCaptureIntent(activity: Activity): Intent = Intent()
         override fun parseResult(resultCode: Int, data: Intent?): ScreenCaptureResult =
@@ -276,6 +333,8 @@ class McqPermissionFlowTest {
     private companion object {
         const val CAPTURE_AREA_TAG = "capture_area"
         const val ANSWER_AREA_TAG = "answer_area"
+        const val SERVER_URL_FIELD_TAG = "server_url_field"
+        const val MODEL_FIELD_TAG = "model_field"
 
         val SampleAnswer = McqAnswer(
             question = "1. Which of the following is the capital of France?",

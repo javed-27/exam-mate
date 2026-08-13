@@ -27,13 +27,17 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -62,9 +66,11 @@ import com.exammate.mcq.McqAnswerStateSaver
 import com.exammate.mcq.McqPermissionState
 import com.exammate.mcq.McqPipeline
 import com.exammate.mcq.McqSolverPipeline
+import com.exammate.mcq.McqServerSettings
 import com.exammate.mcq.PermissionAction
 import com.exammate.mcq.ScreenCaptureRequester
 import com.exammate.mcq.SharedPrefsCameraPermissionStore
+import com.exammate.mcq.SharedPrefsMcqServerSettings
 import com.exammate.mcq.StepStatus
 import com.exammate.mcq.ai.OllamaMcqClient
 import com.exammate.mcq.nextAction
@@ -72,6 +78,8 @@ import com.exammate.mcq.ocr.MlKitOcrService
 import kotlinx.coroutines.launch
 
 internal const val CAMERA_PREVIEW_TAG = "camera_preview"
+internal const val SERVER_URL_FIELD_TAG = "server_url_field"
+internal const val MODEL_FIELD_TAG = "model_field"
 
 @Composable
 fun McqSolverScreen(
@@ -80,6 +88,7 @@ fun McqSolverScreen(
     checker: McqPermissionChecker? = null,
     cameraPermissionStore: CameraPermissionStore? = null,
     screenCaptureRequester: ScreenCaptureRequester? = null,
+    serverSettings: McqServerSettings? = null,
     initialScreenCaptureGranted: Boolean = false,
     requestCamera: ((permission: String, onResult: (Boolean) -> Unit) -> Unit)? = null,
     pipeline: McqPipeline? = null,
@@ -89,8 +98,15 @@ fun McqSolverScreen(
     val effectiveChecker = checker ?: remember { AndroidPermissionChecker(context) }
     val effectiveStore = cameraPermissionStore ?: remember { SharedPrefsCameraPermissionStore(context) }
     val effectiveRequester = screenCaptureRequester ?: remember { DefaultScreenCaptureRequester() }
+    val effectiveSettings = serverSettings ?: remember { SharedPrefsMcqServerSettings(context) }
     val effectivePipeline = pipeline ?: remember {
-        McqSolverPipeline(ocr = MlKitOcrService(), aiClient = OllamaMcqClient())
+        McqSolverPipeline(
+            ocr = MlKitOcrService(),
+            aiClient = OllamaMcqClient(
+                baseUrl = { effectiveSettings.baseUrl },
+                model = { effectiveSettings.model },
+            ),
+        )
     }
     val captureScope = rememberCoroutineScope()
 
@@ -104,6 +120,7 @@ fun McqSolverScreen(
     var answerState by rememberSaveable(stateSaver = McqAnswerStateSaver) {
         mutableStateOf(McqAnswerState.WaitingForOcr)
     }
+    var showServerSettings by remember { mutableStateOf(false) }
 
     val onCameraResult: (Boolean) -> Unit = { granted ->
         if (granted) {
@@ -159,6 +176,12 @@ fun McqSolverScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    DisposableEffect(effectivePipeline) {
+        onDispose {
+            if (pipeline == null) effectivePipeline.close()
+        }
+    }
+
     val state = McqPermissionState(
         camera = if (cameraGranted) StepStatus.GRANTED else StepStatus.PENDING,
         accessibility = when {
@@ -201,6 +224,12 @@ fun McqSolverScreen(
             if (captureActive) {
                 CapturingChip()
                 Spacer(modifier = Modifier.width(16.dp))
+            }
+            IconButton(onClick = { showServerSettings = true }) {
+                Icon(
+                    imageVector = Icons.Filled.Settings,
+                    contentDescription = "Server settings",
+                )
             }
         }
 
@@ -334,10 +363,65 @@ fun McqSolverScreen(
             }
         }
     }
+
+    if (showServerSettings) {
+        ServerSettingsDialog(
+            settings = effectiveSettings,
+            onDismiss = { showServerSettings = false },
+        )
+    }
 }
 
 private fun accessibilitySettingsIntent(): Intent =
     Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+
+@Composable
+private fun ServerSettingsDialog(
+    settings: McqServerSettings,
+    onDismiss: () -> Unit,
+) {
+    var baseUrl by remember { mutableStateOf(settings.baseUrl) }
+    var model by remember { mutableStateOf(settings.model) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Server settings") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = baseUrl,
+                    onValueChange = { baseUrl = it },
+                    label = { Text("Server URL") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag(SERVER_URL_FIELD_TAG),
+                )
+                OutlinedTextField(
+                    value = model,
+                    onValueChange = { model = it },
+                    label = { Text("Model") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag(MODEL_FIELD_TAG),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (baseUrl.isNotBlank()) settings.baseUrl = baseUrl
+                    if (model.isNotBlank()) settings.model = model
+                    onDismiss()
+                },
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+    )
+}
 
 @Composable
 private fun CapturingChip() {

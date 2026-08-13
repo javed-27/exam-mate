@@ -28,7 +28,7 @@ import java.util.concurrent.Executors
 private const val TAG = "CameraPreview"
 private const val MIN_FRAME_INTERVAL_MILLIS = 500L
 private const val MAX_DEBUG_FRAMES = 20
-private const val MAX_FRAME_EDGE = 1440
+private const val MAX_FRAME_EDGE = 1080
 
 @Composable
 fun CameraPreview(
