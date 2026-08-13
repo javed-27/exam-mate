@@ -18,16 +18,16 @@ import okhttp3.Response
 import org.json.JSONObject
 
 class OllamaMcqClient(
-    private val baseUrl: String = OLLAMA_BASE_URL,
-    private val model: String = OLLAMA_MODEL,
-    private val apiKey: String = OLLAMA_API_KEY,
+    private val baseUrl: () -> String = { OLLAMA_BASE_URL },
+    private val model: () -> String = { OLLAMA_MODEL },
+    private val apiKey: () -> String = { OLLAMA_API_KEY },
     private val client: OkHttpClient = defaultClient(),
     private val fallbackBaseUrls: List<String> = DEFAULT_FALLBACK_BASE_URLS,
 ) : McqAiClient {
 
     override fun stream(question: String, options: List<String>): Flow<McqAiEvent> = flow {
         val candidates = buildList {
-            add(baseUrl.trimEnd('/'))
+            add(baseUrl().trimEnd('/'))
             addAll(fallbackBaseUrls.map { it.trimEnd('/') })
         }.distinct()
 
@@ -49,7 +49,7 @@ class OllamaMcqClient(
         options: List<String>,
     ): Flow<McqAiEvent> = callbackFlow {
         val payload = JSONObject()
-            .put("model", model)
+            .put("model", model())
             .put("prompt", buildMcqPrompt(question, options))
             .put("stream", true)
             .toString()
@@ -57,8 +57,8 @@ class OllamaMcqClient(
         val requestBuilder = Request.Builder()
             .url("${baseUrl.trimEnd('/')}/api/generate")
             .post(payload.toRequestBody("application/json".toMediaType()))
-        if (apiKey.isNotBlank()) {
-            requestBuilder.header("Authorization", "Bearer $apiKey")
+        if (apiKey().isNotBlank()) {
+            requestBuilder.header("Authorization", "Bearer ${apiKey()}")
         }
         val request = requestBuilder.build()
 
@@ -116,8 +116,8 @@ class OllamaMcqClient(
 
         fun defaultClient(): OkHttpClient =
             OkHttpClient.Builder()
-                .connectTimeout(10, TimeUnit.SECONDS)
-                .readTimeout(120, TimeUnit.SECONDS)
+                .connectTimeout(4, TimeUnit.SECONDS)
+                .readTimeout(90, TimeUnit.SECONDS)
                 .build()
     }
 }

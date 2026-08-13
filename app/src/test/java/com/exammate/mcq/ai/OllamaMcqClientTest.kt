@@ -27,14 +27,20 @@ class OllamaMcqClientTest {
         server.close()
     }
 
-    private fun client(apiKey: String = ""): OllamaMcqClient =
-        OllamaMcqClient(
-            baseUrl = server.url("/").toString(),
-            model = "qwen2.5:7b",
-            apiKey = apiKey,
+    private var baseUrlProvider: () -> String = { server.url("/").toString() }
+    private var modelProvider: () -> String = { "qwen2.5:7b" }
+    private var apiKeyProvider: () -> String = { "" }
+
+    private fun client(apiKey: String = ""): OllamaMcqClient {
+        apiKeyProvider = { apiKey }
+        return OllamaMcqClient(
+            baseUrl = { baseUrlProvider() },
+            model = { modelProvider() },
+            apiKey = { apiKeyProvider() },
             client = OkHttpClient(),
             fallbackBaseUrls = emptyList(),
         )
+    }
 
     @Test
     fun stream_emitsTextChunksThenAnswer() = runBlocking {
@@ -164,8 +170,8 @@ class OllamaMcqClientTest {
         )
 
         val events = OllamaMcqClient(
-            baseUrl = "http://127.0.0.1:1",
-            model = "qwen2.5:7b",
+            baseUrl = { "http://127.0.0.1:1" },
+            model = { "qwen2.5:7b" },
             client = OkHttpClient.Builder()
                 .connectTimeout(2, TimeUnit.SECONDS)
                 .readTimeout(2, TimeUnit.SECONDS)
@@ -184,8 +190,8 @@ class OllamaMcqClientTest {
     fun stream_allHostsUnreachable_throws() = runBlocking {
         val thrown = try {
             OllamaMcqClient(
-                baseUrl = "http://127.0.0.1:1",
-                model = "qwen2.5:7b",
+                baseUrl = { "http://127.0.0.1:1" },
+                model = { "qwen2.5:7b" },
                 client = OkHttpClient.Builder()
                     .connectTimeout(2, TimeUnit.SECONDS)
                     .readTimeout(2, TimeUnit.SECONDS)
@@ -217,5 +223,42 @@ class OllamaMcqClientTest {
         }
 
         assertTrue(thrown is IOException)
+    }
+
+    @Test
+    fun stream_readsProvidersAtCallTime_soRuntimeChangesApply() = runBlocking {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .body(buildString {
+                    appendLine("""{"response":"{\"answer\": \"C. Paris\", \"confidence\": 0.98, \"explanation\": \"Paris is the capital of France.\"}","done":false}""")
+                    appendLine("""{"response":"","done":true}""")
+                })
+                .build(),
+        )
+
+        baseUrlProvider = { server.url("/").toString() }
+        modelProvider = { "gemma:7b" }
+        val client = client()
+
+        client.stream("Q?", listOf("A. x", "B. y")).toList()
+
+        val recorded = server.takeRequest()
+        assertTrue(recorded.body?.utf8()?.contains("\"model\":\"gemma:7b\"") == true)
+
+        modelProvider = { "qwen2.5:7b" }
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .body(buildString {
+                    appendLine("""{"response":"{\"answer\": \"C. Paris\", \"confidence\": 0.98, \"explanation\": \"Paris is the capital of France.\"}","done":false}""")
+                    appendLine("""{"response":"","done":true}""")
+                })
+                .build(),
+        )
+        client.stream("Q?", listOf("A. x", "B. y")).toList()
+
+        val second = server.takeRequest()
+        assertTrue(second.body?.utf8()?.contains("\"model\":\"qwen2.5:7b\"") == true)
     }
 }
