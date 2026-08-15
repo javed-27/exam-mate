@@ -28,7 +28,7 @@ class SharedPrefsMcqServerSettings(
         const val PREFS_NAME = "mcq_server_settings"
         const val KEY_BASE_URL = "base_url"
         const val KEY_MODEL = "model"
-        const val DEFAULT_BASE_URL = "http://10.136.124.224:11434"
-        const val DEFAULT_MODEL = "gemma4"
+        const val DEFAULT_BASE_URL = "http://localhost:11434"
+        const val DEFAULT_MODEL = "gemma4:12b-mlx"
     }
 }

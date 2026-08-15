@@ -42,12 +42,38 @@ class McqSolverPipelineTest {
         val ai = FakeAiClient(answer = SampleAnswer)
         val pipeline = pipeline(ai = ai, dispatcher = testDispatcher())
 
-        pipeline.processFrame { QUESTION }
+        confirmFrame(pipeline, QUESTION)
         advanceUntilIdle()
 
         val ready = pipeline.state.value as McqAnswerState.Ready
         assertEquals(SampleAnswer.answer, ready.answer.answer)
         assertEquals(1, ai.calls)
+    }
+
+    @Test
+    fun singleFrame_doesNotStartRequest() = runTest {
+        val ai = FakeAiClient(answer = SampleAnswer)
+        val pipeline = pipeline(ai = ai, dispatcher = testDispatcher())
+
+        pipeline.processFrame { QUESTION }
+        advanceUntilIdle()
+
+        assertEquals(McqAnswerState.WaitingForOcr, pipeline.state.value)
+        assertEquals(0, ai.calls)
+    }
+
+    @Test
+    fun consecutiveDifferentStems_neverStartRequest() = runTest {
+        val ai = FakeAiClient(answer = SampleAnswer)
+        val pipeline = pipeline(ai = ai, dispatcher = testDispatcher())
+
+        pipeline.processFrame { "garbage stem 1\nA. x\nB. y" }
+        pipeline.processFrame { "different garbage stem 2\nA. x\nB. y" }
+        pipeline.processFrame { "yet another garbage stem 3\nA. x\nB. y" }
+        advanceUntilIdle()
+
+        assertEquals(McqAnswerState.WaitingForOcr, pipeline.state.value)
+        assertEquals(0, ai.calls)
     }
 
     @Test
@@ -98,9 +124,9 @@ class McqSolverPipelineTest {
         val ai = FakeAiClient(answer = SampleAnswer)
         val pipeline = pipeline(ai = ai, dispatcher = testDispatcher())
 
-        pipeline.processFrame { QUESTION }
+        confirmFrame(pipeline, QUESTION)
         advanceUntilIdle()
-        pipeline.processFrame { NEXT_QUESTION }
+        confirmFrame(pipeline, NEXT_QUESTION)
         advanceUntilIdle()
 
         assertEquals(2, ai.calls)
@@ -119,16 +145,16 @@ class McqSolverPipelineTest {
     }
 
     @Test
-    fun unparseableText_revealsDebugText() = runTest {
-        val ai = FakeAiClient()
+    fun unparseableText_fallsBackToLlm() = runTest {
+        val ai = FakeAiClient(answer = SampleAnswer)
         val pipeline = pipeline(ai = ai, dispatcher = testDispatcher())
 
-        pipeline.processFrame { "Just a sentence without any options" }
+        confirmFrame(pipeline, "Just a sentence without any options")
         advanceUntilIdle()
 
-        val unparsed = pipeline.state.value as McqAnswerState.Unparsed
-        assertEquals("Just a sentence without any options", unparsed.ocrText)
-        assertEquals(0, ai.calls)
+        val ready = pipeline.state.value as McqAnswerState.Ready
+        assertEquals("Just a sentence without any options", ready.answer.question)
+        assertEquals(1, ai.calls)
     }
 
     @Test
@@ -136,7 +162,7 @@ class McqSolverPipelineTest {
         val ai = FakeAiClient(answer = SampleAnswer)
         val pipeline = pipeline(ai = ai, dispatcher = testDispatcher())
 
-        pipeline.processFrame { QUESTION }
+        confirmFrame(pipeline, QUESTION)
         advanceUntilIdle()
         pipeline.processFrame { "stray text with no options" }
         advanceUntilIdle()
@@ -160,7 +186,7 @@ class McqSolverPipelineTest {
         val ai = FakeAiClient(answer = SampleAnswer)
         val pipeline = pipeline(ai = ai, dispatcher = testDispatcher())
 
-        pipeline.processFrame { QUESTION }
+        confirmFrame(pipeline, QUESTION)
         advanceUntilIdle()
         pipeline.processFrame { throw IOException("ocr failed") }
         advanceUntilIdle()
@@ -174,10 +200,10 @@ class McqSolverPipelineTest {
         val ai = FakeAiClient(answer = SampleAnswer)
         val pipeline = pipeline(ai = ai, dispatcher = testDispatcher())
 
-        pipeline.processFrame { QUESTION }
+        confirmFrame(pipeline, QUESTION)
         advanceUntilIdle()
         ai.error = IOException("ai failed")
-        pipeline.processFrame { NEXT_QUESTION }
+        confirmFrame(pipeline, NEXT_QUESTION)
         advanceUntilIdle()
 
         val error = pipeline.state.value as McqAnswerState.Error
@@ -191,7 +217,7 @@ class McqSolverPipelineTest {
         val ai = FakeAiClient(error = IOException("ai failed"))
         val pipeline = pipeline(ai = ai, dispatcher = testDispatcher())
 
-        pipeline.processFrame { QUESTION }
+        confirmFrame(pipeline, QUESTION)
         advanceUntilIdle()
 
         val error = pipeline.state.value as McqAnswerState.Error
@@ -206,7 +232,7 @@ class McqSolverPipelineTest {
         val states = mutableListOf<McqAnswerState>()
         backgroundScope.launch { pipeline.state.collect { states += it } }
 
-        pipeline.processFrame { QUESTION }
+        confirmFrame(pipeline, QUESTION)
         advanceUntilIdle()
 
         assertTrue(states.any { it is McqAnswerState.Streaming })
@@ -224,14 +250,20 @@ class McqSolverPipelineTest {
         val pipeline = pipeline(ai = ai, clock = clock, dispatcher = testDispatcher())
 
         pipeline.processFrame { QUESTION }
-        advanceUntilIdle()
+        now += 100
         pipeline.processFrame { NEXT_QUESTION }
-        assertEquals(1, ai.calls)
+        now += 100
+        pipeline.processFrame { NEXT_QUESTION }
+        assertEquals(0, ai.calls)
+
+        now += 600
+        pipeline.processFrame { NEXT_QUESTION }
+        assertEquals(0, ai.calls)
 
         now += 600
         pipeline.processFrame { NEXT_QUESTION }
         advanceUntilIdle()
-        assertEquals(2, ai.calls)
+        assertEquals(1, ai.calls)
     }
 
     @Test
@@ -250,9 +282,14 @@ class McqSolverPipelineTest {
         val pipeline = pipeline(ai = ai, clock = clock, dispatcher = testDispatcher())
 
         val job = launch { pipeline.processFrame { QUESTION } }
+        runCurrent()
+        now += 1000
+        pipeline.processFrame { QUESTION }
         entered.await()
         assertEquals(1, ai.calls)
 
+        now += 1000
+        pipeline.processFrame { NEXT_QUESTION }
         now += 1000
         pipeline.processFrame { NEXT_QUESTION }
         runCurrent()
@@ -283,6 +320,9 @@ class McqSolverPipelineTest {
         val pipeline = pipeline(ai = ai, clock = clock, dispatcher = testDispatcher())
 
         val job = launch { pipeline.processFrame { QUESTION } }
+        runCurrent()
+        now += 1000
+        pipeline.processFrame { QUESTION }
         entered.await()
         assertEquals(1, ai.calls)
 
@@ -298,12 +338,87 @@ class McqSolverPipelineTest {
     }
 
     @Test
+    fun jitteredStemVariantWhileStreaming_isNotRestarted() = runTest {
+        var now = 1000L
+        val clock = { now }
+        val entered = CompletableDeferred<Unit>()
+        val released = CompletableDeferred<Unit>()
+        val ai = FakeAiClient(
+            answer = SampleAnswer,
+            onStreamStart = {
+                entered.complete(Unit)
+                released.await()
+            },
+        )
+        val pipeline = pipeline(ai = ai, clock = clock, dispatcher = testDispatcher())
+
+        val job = launch { pipeline.processFrame { QUESTION } }
+        runCurrent()
+        now += 1000
+        pipeline.processFrame { QUESTION }
+        entered.await()
+        assertEquals(1, ai.calls)
+
+        now += 1000
+        pipeline.processFrame { "1. Which of the following is the capital of France?\nA. Berlin\nB. Madrid\nC. Paris\nD. Rome" }
+        runCurrent()
+        assertEquals(1, ai.calls)
+
+        now += 1000
+        pipeline.processFrame { "01 Which of the following is the capital of France?\nA Berlin\nB. Madrid\nC. Paris\nD. Rome" }
+        runCurrent()
+        assertEquals(1, ai.calls)
+
+        released.complete(Unit)
+        advanceUntilIdle()
+        job.join()
+        assertTrue(pipeline.state.value is McqAnswerState.Ready)
+    }
+
+    @Test
+    fun jitteredStemVariant_afterAnswer_doesNotReprocess() = runTest {
+        val ai = FakeAiClient(answer = SampleAnswer)
+        val pipeline = pipeline(ai = ai, dispatcher = testDispatcher())
+
+        pipeline.processFrame { QUESTION }
+        advanceUntilIdle()
+        pipeline.processFrame { "1. Which of the following is the capital of France?\nA Berlin\nB. Madrid\nC. Paris\nD. Rome" }
+        advanceUntilIdle()
+        pipeline.processFrame { "01 Which of the following is the capital of France?\nA. Berlin\nB. Madrid\nC. Paris\nD. Rome" }
+        advanceUntilIdle()
+
+        assertTrue(pipeline.state.value is McqAnswerState.Ready)
+        assertEquals(1, ai.calls)
+    }
+
+    @Test
+    fun jitteredStemVariant_afterError_isBackoffBlocked() = runTest {
+        var now = 1000L
+        val clock = { now }
+        val ai = FakeAiClient(error = IOException("boom"))
+        val pipeline = pipeline(ai = ai, clock = clock, dispatcher = testDispatcher())
+
+        pipeline.processFrame { QUESTION }
+        now += 1000
+        pipeline.processFrame { QUESTION }
+        advanceUntilIdle()
+        assertTrue(pipeline.state.value is McqAnswerState.Error)
+
+        now += 1000
+        pipeline.processFrame { "1. Which of the following is the capital of France?\nA. Berlin\nB. Madrid\nC. Paris\nD. Rome" }
+        advanceUntilIdle()
+        assertEquals(1, ai.calls)
+    }
+
+    @Test
     fun aiFailure_sameStem_notRetriedWithinBackoff() = runTest {
         var now = 1000L
         val clock = { now }
         val ai = FakeAiClient(error = IOException("boom"))
         val pipeline = pipeline(ai = ai, clock = clock, dispatcher = testDispatcher())
 
+        pipeline.processFrame { QUESTION }
+        now += 1000
         pipeline.processFrame { QUESTION }
         advanceUntilIdle()
         assertTrue(pipeline.state.value is McqAnswerState.Error)
@@ -322,10 +437,14 @@ class McqSolverPipelineTest {
         val pipeline = pipeline(ai = ai, clock = clock, dispatcher = testDispatcher())
 
         pipeline.processFrame { QUESTION }
+        now += 1000
+        pipeline.processFrame { QUESTION }
         advanceUntilIdle()
         assertTrue(pipeline.state.value is McqAnswerState.Error)
 
         now += 5000
+        pipeline.processFrame { QUESTION }
+        now += 1000
         pipeline.processFrame { QUESTION }
         advanceUntilIdle()
         assertEquals(2, ai.calls)
@@ -360,6 +479,11 @@ class McqSolverPipelineTest {
 
     private fun TestScope.testDispatcher(): CoroutineDispatcher =
         StandardTestDispatcher(testScheduler)
+
+    private suspend fun TestScope.confirmFrame(pipeline: McqSolverPipeline, text: String) {
+        pipeline.processFrame { text }
+        pipeline.processFrame { text }
+    }
 
     private fun pipeline(
         ocr: FakeOcrService = FakeOcrService(),

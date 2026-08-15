@@ -18,8 +18,15 @@ fun buildMcqPrompt(question: String, options: List<String>): String =
     buildString {
         appendLine("You are solving a multiple-choice question.")
         appendLine("Question: $question")
-        appendLine("Options:")
-        options.forEach { appendLine("- $it") }
+        if (options.isEmpty()) {
+            appendLine(
+                "The question text above may contain the answer options " +
+                    "embedded in it. Extract them if present, then select the best answer.",
+            )
+        } else {
+            appendLine("Options:")
+            options.forEach { appendLine("- $it") }
+        }
         appendLine(
             """Reply with ONLY a JSON object in this exact shape: """ +
                 """{"answer": "<option text>", "confidence": 0.0-1.0, "explanation": "<one short sentence>"}""",

@@ -28,6 +28,14 @@ class McqPromptTest {
     }
 
     @Test
+    fun prompt_withoutOptions_instructsExtraction() {
+        val prompt = buildMcqPrompt("A. Berlin\nB. Madrid\nC. Paris\nD. Rome", emptyList())
+
+        assertTrue(prompt.contains("may contain the answer options"))
+        assertTrue(prompt.contains("A. Berlin"))
+    }
+
+    @Test
     fun extractJson_handlesMarkdownFences() {
         val wrapped = "```json\n{\"answer\": \"C. Paris\", \"confidence\": 0.98, \"explanation\": \"It is the capital.\"}\n```"
 

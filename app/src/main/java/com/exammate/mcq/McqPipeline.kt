@@ -53,6 +53,7 @@ class McqSolverPipeline(
     private var lastProcessedTime: Long = 0L
     private var processingJob: Job? = null
     private var processingStem: String? = null
+    private var pendingStem: String? = null
 
     internal var framesDelivered: Int = 0
         private set
@@ -107,31 +108,55 @@ class McqSolverPipeline(
         Log.d(TAG, "OCR text: ${normalized.take(600)}")
         if (normalized.isEmpty()) {
             Log.d(TAG, "OCR returned empty text")
-        }
-        val parsed = parser.parse(text) ?: run {
-            Log.d(TAG, "Parse failed: no >=2 lettered/numbered option lines")
-            val current = _state.value
-            if (normalized.isNotBlank() && current !is McqAnswerState.Ready && current !is McqAnswerState.Error) {
-                _state.value = McqAnswerState.Unparsed(normalized.take(MAX_DEBUG_TEXT_LENGTH))
-            }
             return
         }
-        val stem = parser.normalize(parsed.question)
-        Log.d(TAG, "Parsed stem: $stem")
 
-        if (stem == processingStem) {
+        val parsed = parser.parse(text)
+        val stem: String
+        val question: String
+        val options: List<String>
+        if (parsed != null) {
+            stem = parser.normalize(parsed.question)
+            question = parsed.question
+            options = parsed.options
+            Log.d(TAG, "Parsed stem: $stem")
+        } else {
+            val current = _state.value
+            if (current is McqAnswerState.Ready || current is McqAnswerState.Error) {
+                Log.d(TAG, "Parse failed after answer; keeping last answer")
+                return
+            }
+            if (processingStem != null) {
+                Log.d(TAG, "Parse failed while streaming; letting current request finish")
+                return
+            }
+            Log.d(TAG, "Parse failed: no >=2 lettered/numbered option lines; falling back to raw OCR text")
+            stem = parser.sanitize(normalized)
+            question = normalized
+            options = emptyList()
+        }
+
+        if (isSameQuestion(stem, processingStem)) {
             Log.d(TAG, "Already processing this stem; skipping")
             return
         }
-        if (stem == lastProcessedStem) {
+        if (isSameQuestion(stem, lastProcessedStem)) {
             Log.d(TAG, "Dedupe: stem already processed, skipping")
             return
         }
         val now = currentTimeMillis()
-        if (stem == lastFailureStem && now - lastFailureTime < aiRetryBackoffMillis) {
+        if (isSameQuestion(stem, lastFailureStem) && now - lastFailureTime < aiRetryBackoffMillis) {
             Log.d(TAG, "Backoff: failed stem retried too soon, skipping")
             return
         }
+
+        if (!isSameQuestion(stem, pendingStem)) {
+            pendingStem = stem
+            Log.d(TAG, "Stem seen once; awaiting confirmation")
+            return
+        }
+        pendingStem = null
+        Log.d(TAG, "Stem confirmed across frames")
 
         processingJob?.cancel()
         processingStem = stem
@@ -140,7 +165,7 @@ class McqSolverPipeline(
         processingJob = scope.launch {
             try {
                 var partialText = ""
-                aiClient.stream(parsed.question, parsed.options).collect { event ->
+                aiClient.stream(question, options).collect { event ->
                     when (event) {
                         is McqAiEvent.Text -> {
                             partialText += event.text
@@ -179,11 +204,24 @@ class McqSolverPipeline(
     private fun isThrottled(): Boolean =
         currentTimeMillis() - lastProcessedTime < minFrameIntervalMillis
 
+    private fun isSameQuestion(a: String?, b: String?): Boolean {
+        if (a == null || b == null) return a == b
+        if (a == b) return true
+        val ta = tokens(a)
+        val tb = tokens(b)
+        if (ta.isEmpty() || tb.isEmpty()) return false
+        val overlap = ta.intersect(tb).size
+        return 2.0 * overlap / (ta.size + tb.size) >= STEM_SIMILARITY_THRESHOLD
+    }
+
+    private fun tokens(text: String): List<String> =
+        text.lowercase().split(Regex("""[^a-z0-9]+""")).filter { it.isNotEmpty() }
+
     private companion object {
         const val TAG = "McqPipeline"
-        const val MAX_DEBUG_TEXT_LENGTH = 1500
         const val DEFAULT_CHANGE_THRESHOLD = 4
         const val DEFAULT_AI_RETRY_BACKOFF_MILLIS = 5000L
+        const val STEM_SIMILARITY_THRESHOLD = 0.6
     }
 }
 

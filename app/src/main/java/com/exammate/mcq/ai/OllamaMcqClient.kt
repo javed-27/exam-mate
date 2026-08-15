@@ -1,5 +1,6 @@
 package com.exammate.mcq.ai
 
+import android.util.Log
 import com.exammate.mcq.McqAnswer
 import java.io.IOException
 import java.util.concurrent.TimeUnit
@@ -23,6 +24,7 @@ class OllamaMcqClient(
     private val apiKey: () -> String = { OLLAMA_API_KEY },
     private val client: OkHttpClient = defaultClient(),
     private val fallbackBaseUrls: List<String> = DEFAULT_FALLBACK_BASE_URLS,
+    private val keepAlive: String = DEFAULT_KEEP_ALIVE,
 ) : McqAiClient {
 
     override fun stream(question: String, options: List<String>): Flow<McqAiEvent> = flow {
@@ -34,9 +36,12 @@ class OllamaMcqClient(
         var lastError: Exception? = null
         for (candidate in candidates) {
             try {
+                Log.d(TAG, "Streaming to $candidate (question len=${question.length}, options=${options.size})")
                 emitAll(streamFrom(candidate, question, options))
+                Log.d(TAG, "Stream from $candidate completed")
                 return@flow
             } catch (e: Exception) {
+                Log.w(TAG, "Stream from $candidate failed", e)
                 lastError = e
             }
         }
@@ -52,6 +57,7 @@ class OllamaMcqClient(
             .put("model", model())
             .put("prompt", buildMcqPrompt(question, options))
             .put("stream", true)
+            .put("keep_alive", keepAlive)
             .toString()
 
         val requestBuilder = Request.Builder()
@@ -65,25 +71,31 @@ class OllamaMcqClient(
         val call = client.newCall(request)
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
+                Log.w(TAG, "Call failed to $baseUrl", e)
                 close(e)
             }
 
             override fun onResponse(call: Call, response: Response) {
                 response.use {
                     if (!it.isSuccessful) {
+                        Log.w(TAG, "Ollama responded with HTTP ${it.code}")
                         close(IOException("Ollama responded with HTTP ${it.code}"))
                         return
                     }
+                    Log.d(TAG, "Response OK from $baseUrl; reading stream")
                     val source = it.body.source()
                     try {
                         val textBuilder = StringBuilder()
+                        var chunks = 0
                         while (true) {
                             val line = source.readUtf8Line() ?: break
                             if (line.isBlank()) continue
                             val chunk = JSONObject(line)
                             val chunkText = chunk.optString("response")
                             textBuilder.append(chunkText)
+                            chunks++
                             if (chunk.optBoolean("done")) {
+                                Log.d(TAG, "Stream done after $chunks chunks")
                                 val answer = parseOllamaAnswer(textBuilder.toString())
                                 trySend(McqAiEvent.Answer(toAnswer(question, answer)))
                                 close()
@@ -92,8 +104,10 @@ class OllamaMcqClient(
                                 trySend(McqAiEvent.Text(chunkText))
                             }
                         }
+                        Log.w(TAG, "Ollama stream ended without done after $chunks chunks")
                         close(IOException("Ollama stream ended without done"))
                     } catch (e: Exception) {
+                        Log.w(TAG, "Error reading stream from $baseUrl", e)
                         close(e)
                     }
                 }
@@ -111,6 +125,8 @@ class OllamaMcqClient(
         )
 
     private companion object {
+        const val TAG = "OllamaMcqClient"
+        const val DEFAULT_KEEP_ALIVE = "30m"
         val DEFAULT_FALLBACK_BASE_URLS: List<String> =
             listOf("http://localhost:11434", "http://10.0.2.2:11434")
 

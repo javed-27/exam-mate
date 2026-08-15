@@ -7,8 +7,8 @@ data class ParsedMcq(
 
 object McqQuestionParser {
 
-    private val letteredOption = Regex("""^([A-Ha-h])[:.)]\s+(.+)$""")
-    private val numberedOption = Regex("""^(\d{1,2})[:.)]\s+(.+)$""")
+    private val letteredOption = Regex("""^([A-Ha-h])(?:[:.)]\s*|\s+)(.+)$""")
+    private val numberedOption = Regex("""^(\d{1,2})(?:[:.)]\s*|\s+)(.+)$""")
     private val bulletedOption = Regex("""^([•◦▪▫‣»·*\-–—])\s*(.+)$""")
     private val radioOption = Regex("""^[Oo]\s+[A-Za-z].+$""")
     private val chromeLine = Regex(
@@ -55,11 +55,12 @@ object McqQuestionParser {
 
     private fun optionLines(lines: List<String>, regex: Regex): List<OptionLine> =
         lines.mapIndexedNotNull { index, line ->
-            if (regex.matches(line)) OptionLine(index, line) else null
+            if (isChromeLine(line) || !regex.matches(line)) null else OptionLine(index, line)
         }
 
+    private fun isChromeLine(line: String): Boolean =
+        line.contains(navMarker) || chromeLine.find(line)?.range?.first == 0
+
     private fun stripLeadingChrome(lines: List<String>): List<String> =
-        lines.dropWhile { line ->
-            line.contains(navMarker) || chromeLine.find(line)?.range?.first == 0
-        }
+        lines.dropWhile { line -> isChromeLine(line) }
 }

@@ -49,6 +49,25 @@ class McqQuestionParserTest {
     }
 
     @Test
+    fun parsesOptionsWithoutPunctuation_asOcrDelivers() {
+        val parsed = McqQuestionParser.parse(
+            "All of these countries EXCEPT which one sell Coca-Cola?\n" +
+                "A Paraguay\nB Italy\nC Canada\nD Cuba",
+        )
+
+        assertEquals("All of these countries EXCEPT which one sell Coca-Cola?", parsed?.question)
+        assertEquals(listOf("A Paraguay", "B Italy", "C Canada", "D Cuba"), parsed?.options)
+    }
+
+    @Test
+    fun parsesNumberedOptionsWithoutPunctuation() {
+        val parsed = McqQuestionParser.parse("Which planet is closest to the Sun?\n1 Venus\n2 Mercury\n3 Mars")
+
+        assertEquals("Which planet is closest to the Sun?", parsed?.question)
+        assertEquals(listOf("1 Venus", "2 Mercury", "3 Mars"), parsed?.options)
+    }
+
+    @Test
     fun optionFormatVariants() {
         val parsed = McqQuestionParser.parse(
             "Choose one:\na) red\nb) green\nc) blue\nd) yellow",

@@ -78,6 +78,7 @@ class OllamaMcqClientTest {
         assertEquals("/api/generate", recorded.url.encodedPath)
         assertTrue(recorded.body?.utf8()?.contains("\"stream\":true") == true)
         assertTrue(recorded.body?.utf8()?.contains("\"model\":\"qwen2.5:7b\"") == true)
+        assertTrue(recorded.body?.utf8()?.contains("\"keep_alive\":\"30m\"") == true)
     }
 
     @Test
@@ -223,6 +224,32 @@ class OllamaMcqClientTest {
         }
 
         assertTrue(thrown is IOException)
+    }
+
+    @Test
+    fun stream_sendsCustomKeepAlive() = runBlocking {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .body(buildString {
+                    appendLine("""{"response":"{\"answer\": \"C. Paris\", \"confidence\": 0.98, \"explanation\": \"Paris is the capital of France.\"}","done":false}""")
+                    appendLine("""{"response":"","done":true}""")
+                })
+                .build(),
+        )
+
+        val events = OllamaMcqClient(
+            baseUrl = { server.url("/").toString() },
+            model = { "qwen2.5:7b" },
+            client = OkHttpClient(),
+            fallbackBaseUrls = emptyList(),
+            keepAlive = "-1",
+        ).stream("Q?", listOf("A. x", "B. y")).toList()
+
+        assertTrue(events.last() is McqAiEvent.Answer)
+
+        val recorded = server.takeRequest()
+        assertTrue(recorded.body?.utf8()?.contains("\"keep_alive\":\"-1\"") == true)
     }
 
     @Test

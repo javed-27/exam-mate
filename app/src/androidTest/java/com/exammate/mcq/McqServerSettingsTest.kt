@@ -16,8 +16,8 @@ class McqServerSettingsTest {
         context.getSharedPreferences("mcq_server_settings", 0).edit().clear().commit()
         val settings = SharedPrefsMcqServerSettings(context)
 
-        assertEquals("http://10.136.124.224:11434", settings.baseUrl)
-        assertEquals("gemma4", settings.model)
+        assertEquals("http://localhost:11434", settings.baseUrl)
+        assertEquals("gemma4:12b-mlx", settings.model)
     }
 
     @Test
