@@ -45,11 +45,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.exammate.mcq.CameraPermissionStore
+import com.exammate.mcq.McqServerSettings
 import com.exammate.mcq.SharedPrefsCameraPermissionStore
+import com.exammate.mcq.SharedPrefsMcqServerSettings
 import com.exammate.mcq.ocr.MlKitOcrService
 import com.exammate.mcq.ocr.OcrService
+import com.exammate.theory.TheoryAnswerModel
+import com.exammate.theory.TheoryAnswerState
 import com.exammate.theory.TheoryCaptureModel
 import com.exammate.theory.TheoryCaptureState
+import com.exammate.theory.ai.OllamaTheoryClient
+import com.exammate.theory.ai.TheoryAiClient
 import com.exammate.ui.mcq.CAMERA_PREVIEW_TAG
 import com.exammate.ui.mcq.CameraPreview
 import com.exammate.ui.mcq.DeniedCard
@@ -66,6 +72,9 @@ fun TheorySolverScreen(
     ocrService: OcrService? = null,
     model: TheoryCaptureModel? = null,
     initialFrame: Bitmap? = null,
+    serverSettings: McqServerSettings? = null,
+    aiClient: TheoryAiClient? = null,
+    answerModel: TheoryAnswerModel? = null,
 ) {
     val context = LocalContext.current
     val effectiveStore = cameraPermissionStore
@@ -73,6 +82,14 @@ fun TheorySolverScreen(
     val effectiveIsCameraGranted = isCameraGranted
         ?: remember { { isCameraPermissionGranted(context) } }
     val effectiveOcr = ocrService ?: remember { MlKitOcrService() }
+    val effectiveSettings = serverSettings
+        ?: remember { SharedPrefsMcqServerSettings(context) }
+    val effectiveAiClient = aiClient ?: remember {
+        OllamaTheoryClient(
+            baseUrl = { effectiveSettings.baseUrl },
+            model = { effectiveSettings.model },
+        )
+    }
 
     var cameraGranted by remember { mutableStateOf(effectiveIsCameraGranted()) }
     var latestFrame by remember { mutableStateOf(initialFrame) }
@@ -85,6 +102,10 @@ fun TheorySolverScreen(
     val captureState by effectiveModel.state.collectAsState(
         initial = TheoryCaptureState.Viewfinder,
     )
+    val effectiveAnswerModel = answerModel ?: remember { TheoryAnswerModel(effectiveAiClient) }
+    val answerState by effectiveAnswerModel.state.collectAsState(
+        initial = TheoryAnswerState.Idle,
+    )
 
     LaunchedEffect(effectiveModel) {
         effectiveModel.state.collect { state ->
@@ -92,16 +113,18 @@ fun TheorySolverScreen(
         }
     }
 
-    DisposableEffect(effectiveModel, effectiveOcr) {
+    DisposableEffect(effectiveModel, effectiveOcr, effectiveAnswerModel) {
         onDispose {
             if (model == null) effectiveModel.close()
             if (ocrService == null) effectiveOcr.close()
+            if (answerModel == null) effectiveAnswerModel.close()
         }
     }
 
     val onRecapture: () -> Unit = {
         preservedOcrText = null
         effectiveModel.recapture()
+        effectiveAnswerModel.reset()
     }
     val onCameraResult: (Boolean) -> Unit = { granted ->
         if (granted) {
@@ -130,6 +153,18 @@ fun TheorySolverScreen(
         TheoryCaptureState.Captured(restoredText)
     } else {
         captureState
+    }
+    val capturedText = (effectiveCaptureState as? TheoryCaptureState.Captured)?.ocrText
+    val onRetryAnswer: () -> Unit = {
+        capturedText?.let { effectiveAnswerModel.generate(it) }
+    }
+
+    LaunchedEffect(capturedText) {
+        if (capturedText != null) {
+            effectiveAnswerModel.generate(capturedText)
+        } else {
+            effectiveAnswerModel.reset()
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -181,9 +216,11 @@ fun TheorySolverScreen(
                     is TheoryCaptureState.Captured,
                     is TheoryCaptureState.OcrFailed -> CapturedContent(
                         state = effectiveCaptureState,
+                        answerState = answerState,
                         image = latestFrame,
                         onEnlarge = { showEnlarged = true },
                         onRecapture = onRecapture,
+                        onRetryAnswer = onRetryAnswer,
                     )
                 }
             }
@@ -261,9 +298,11 @@ private fun ViewfinderContent(
 @Composable
 private fun CapturedContent(
     state: TheoryCaptureState,
+    answerState: TheoryAnswerState,
     image: Bitmap?,
     onEnlarge: () -> Unit,
     onRecapture: () -> Unit,
+    onRetryAnswer: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         CapturedQuestionCard(
@@ -277,7 +316,9 @@ private fun CapturedContent(
         )
         TheoryAnswerArea(
             state = state,
+            answerState = answerState,
             onRetake = onRecapture,
+            onRetryAnswer = onRetryAnswer,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(0.8f),

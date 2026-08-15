@@ -35,6 +35,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.exammate.theory.TheoryAnswerState
 import com.exammate.theory.TheoryCaptureState
 
 internal const val CAPTURED_QUESTION_CARD_TAG = "captured_question_card"
@@ -42,6 +43,8 @@ internal const val CAPTURED_IMAGE_TAG = "captured_image"
 internal const val RECAPTURE_BUTTON_TAG = "recapture_button"
 internal const val RETRY_BUTTON_TAG = "retry_button"
 internal const val OCR_TEXT_TAG = "ocr_text"
+internal const val ANSWER_TEXT_TAG = "answer_text"
+internal const val ANSWER_RETRY_TAG = "answer_retry"
 internal const val ENLARGED_IMAGE_TAG = "enlarged_image"
 
 @Composable
@@ -155,7 +158,9 @@ fun EnlargeImageDialog(
 @Composable
 fun TheoryAnswerArea(
     state: TheoryCaptureState,
+    answerState: TheoryAnswerState,
     onRetake: () -> Unit,
+    onRetryAnswer: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -179,7 +184,7 @@ fun TheoryAnswerArea(
             }
             is TheoryCaptureState.Captured -> {
                 Text(
-                    text = "Question text",
+                    text = "Question",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -189,6 +194,11 @@ fun TheoryAnswerArea(
                     modifier = Modifier
                         .padding(top = 8.dp)
                         .testTag(OCR_TEXT_TAG),
+                )
+                AnswerSection(
+                    state = answerState,
+                    onRetry = onRetryAnswer,
+                    modifier = Modifier.padding(top = 16.dp),
                 )
             }
             is TheoryCaptureState.OcrFailed -> {
@@ -208,6 +218,79 @@ fun TheoryAnswerArea(
                     modifier = Modifier.testTag(RETRY_BUTTON_TAG),
                 ) {
                     Text("Retake photo")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AnswerSection(
+    state: TheoryAnswerState,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = "Answer",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        when (state) {
+            TheoryAnswerState.Idle -> Unit
+            is TheoryAnswerState.Generating -> {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 8.dp),
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Generating answer…",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (state.partialText.isNotBlank()) {
+                    Text(
+                        text = state.partialText,
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier
+                            .padding(top = 8.dp)
+                            .testTag(ANSWER_TEXT_TAG),
+                    )
+                }
+            }
+            is TheoryAnswerState.Answer -> {
+                Text(
+                    text = state.text,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .testTag(ANSWER_TEXT_TAG),
+                )
+            }
+            is TheoryAnswerState.Error -> {
+                Text(
+                    text = "Answer generation failed",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                Text(
+                    text = state.message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                TextButton(
+                    onClick = onRetry,
+                    modifier = Modifier.testTag(ANSWER_RETRY_TAG),
+                ) {
+                    Text("Retry")
                 }
             }
         }

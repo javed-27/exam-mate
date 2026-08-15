@@ -10,9 +10,12 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.exammate.mcq.CameraPermissionStore
+import com.exammate.theory.TheoryAnswerModel
 import com.exammate.theory.TheoryCaptureModel
+import com.exammate.theory.ai.TheoryAiClient
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.flow
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -92,6 +95,85 @@ class TheoryCaptureFlowTest {
         composeRule.onNodeWithTag(CAPTURED_IMAGE_TAG).assertIsDisplayed()
         composeRule.onNodeWithText("Explain the structure of the human heart.").assertIsDisplayed()
         composeRule.onAllNodesWithTag(SHUTTER_BUTTON_TAG).assertCountEquals(0)
+    }
+
+    @Test
+    fun capture_generatesAnswerFromAi() {
+        val model = model(recognize = { "Explain the human heart." })
+        setContent(
+            cameraGranted = true,
+            denied = false,
+            model = model,
+            initialFrame = testBitmap(),
+            aiClient = TheoryAiClient { question ->
+                flow { emit("The heart pumps blood throughout the body.") }
+            },
+        )
+
+        composeRule.onNodeWithTag(SHUTTER_BUTTON_TAG).performClick()
+        waitUntilTag(ANSWER_TEXT_TAG)
+
+        composeRule.onNodeWithText("Question").assertIsDisplayed()
+        composeRule.onNodeWithText("Explain the human heart.").assertIsDisplayed()
+        composeRule.onNodeWithText("Answer").assertIsDisplayed()
+        composeRule.onNodeWithText("The heart pumps blood throughout the body.").assertIsDisplayed()
+    }
+
+    @Test
+    fun answerGeneration_showsProgressThenAnswer() {
+        val gate = CompletableDeferred<Unit>()
+        val model = model(recognize = { "Explain the human heart." })
+        setContent(
+            cameraGranted = true,
+            denied = false,
+            model = model,
+            initialFrame = testBitmap(),
+            aiClient = TheoryAiClient {
+                flow {
+                    gate.await()
+                    emit("The answer.")
+                }
+            },
+        )
+
+        composeRule.onNodeWithTag(SHUTTER_BUTTON_TAG).performClick()
+        waitForOcrText()
+        composeRule.onNodeWithText("Generating answer…").assertIsDisplayed()
+
+        composeRule.runOnIdle { gate.complete(Unit) }
+        waitUntilTag(ANSWER_TEXT_TAG)
+
+        composeRule.onNodeWithText("The answer.").assertIsDisplayed()
+    }
+
+    @Test
+    fun answerFailure_showsRetryAndRegenerates() {
+        var fail = true
+        val model = model(recognize = { "Explain the human heart." })
+        setContent(
+            cameraGranted = true,
+            denied = false,
+            model = model,
+            initialFrame = testBitmap(),
+            aiClient = TheoryAiClient {
+                flow {
+                    if (fail) throw IOException("server unreachable")
+                    emit("Recovered answer.")
+                }
+            },
+        )
+
+        composeRule.onNodeWithTag(SHUTTER_BUTTON_TAG).performClick()
+        waitUntilTag(ANSWER_RETRY_TAG)
+
+        composeRule.onNodeWithText("Answer generation failed").assertIsDisplayed()
+        composeRule.onNodeWithText("server unreachable").assertIsDisplayed()
+
+        composeRule.runOnIdle { fail = false }
+        composeRule.onNodeWithTag(ANSWER_RETRY_TAG).performClick()
+        waitUntilTag(ANSWER_TEXT_TAG)
+
+        composeRule.onNodeWithText("Recovered answer.").assertIsDisplayed()
     }
 
     @Test
@@ -192,6 +274,7 @@ class TheoryCaptureFlowTest {
                 requestCamera = { _, _ -> },
                 model = model,
                 initialFrame = testBitmap(),
+                aiClient = fakeAiClient(),
             )
         }
 
@@ -223,6 +306,7 @@ class TheoryCaptureFlowTest {
         requestCamera: ((String, (Boolean) -> Unit) -> Unit)? = null,
         model: TheoryCaptureModel? = null,
         initialFrame: Bitmap? = null,
+        aiClient: TheoryAiClient? = null,
     ) {
         composeRule.setContent {
             TheorySolverScreen(
@@ -232,12 +316,18 @@ class TheoryCaptureFlowTest {
                 requestCamera = requestCamera,
                 model = model,
                 initialFrame = initialFrame,
+                aiClient = aiClient ?: fakeAiClient(),
             )
         }
     }
 
     private fun model(recognize: suspend () -> String): TheoryCaptureModel =
         TheoryCaptureModel(recognize = recognize)
+
+    private fun fakeAiClient(): TheoryAiClient =
+        TheoryAiClient { _: String ->
+            flow { emit("The answer to the question.") }
+        }
 
     private fun testBitmap(): Bitmap =
         Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888)
