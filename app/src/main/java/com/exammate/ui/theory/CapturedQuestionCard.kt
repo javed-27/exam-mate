@@ -163,61 +163,71 @@ fun TheoryAnswerArea(
     onRetryAnswer: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
-        when (state) {
-            TheoryCaptureState.Viewfinder -> Unit
-            TheoryCaptureState.Capturing -> {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    Spacer(modifier = Modifier.width(8.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(12.dp),
+        ) {
+            when (state) {
+                TheoryCaptureState.Viewfinder -> Unit
+                TheoryCaptureState.Capturing -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Extracting question text…",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                is TheoryCaptureState.Captured -> {
                     Text(
-                        text = "Extracting question text…",
+                        text = "Question",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = state.ocrText,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .padding(top = 8.dp)
+                            .testTag(OCR_TEXT_TAG),
+                    )
+                    AnswerSection(
+                        state = answerState,
+                        onRetry = onRetryAnswer,
+                        modifier = Modifier.padding(top = 16.dp),
                     )
                 }
-            }
-            is TheoryCaptureState.Captured -> {
-                Text(
-                    text = "Question",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    text = state.ocrText,
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier
-                        .padding(top = 8.dp)
-                        .testTag(OCR_TEXT_TAG),
-                )
-                AnswerSection(
-                    state = answerState,
-                    onRetry = onRetryAnswer,
-                    modifier = Modifier.padding(top = 16.dp),
-                )
-            }
-            is TheoryCaptureState.OcrFailed -> {
-                Text(
-                    text = "Couldn't read the question",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.error,
-                )
-                Text(
-                    text = state.message,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                TextButton(
-                    onClick = onRetake,
-                    modifier = Modifier.testTag(RETRY_BUTTON_TAG),
-                ) {
-                    Text("Retake photo")
+                is TheoryCaptureState.OcrFailed -> {
+                    Text(
+                        text = "Couldn't read the question",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Text(
+                        text = state.message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                    TextButton(
+                        onClick = onRetake,
+                        modifier = Modifier.testTag(RETRY_BUTTON_TAG),
+                    ) {
+                        Text("Retake photo")
+                    }
                 }
             }
         }
