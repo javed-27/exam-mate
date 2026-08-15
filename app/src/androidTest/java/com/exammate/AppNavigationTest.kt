@@ -1,7 +1,9 @@
 package com.exammate
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -68,7 +70,7 @@ class AppNavigationTest {
         composeTestRule.onNodeWithText("Theory Question Solver").performClick()
 
         composeTestRule.onNodeWithText("Theory Question Solver").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Coming soon").assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("Coming soon").assertCountEquals(0)
     }
 
     @Test

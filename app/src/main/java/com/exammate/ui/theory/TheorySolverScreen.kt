@@ -65,6 +65,7 @@ fun TheorySolverScreen(
     requestCamera: ((permission: String, onResult: (Boolean) -> Unit) -> Unit)? = null,
     ocrService: OcrService? = null,
     model: TheoryCaptureModel? = null,
+    initialFrame: Bitmap? = null,
 ) {
     val context = LocalContext.current
     val effectiveStore = cameraPermissionStore
@@ -74,7 +75,7 @@ fun TheorySolverScreen(
     val effectiveOcr = ocrService ?: remember { MlKitOcrService() }
 
     var cameraGranted by remember { mutableStateOf(effectiveIsCameraGranted()) }
-    var latestFrame by remember { mutableStateOf<Bitmap?>(null) }
+    var latestFrame by remember { mutableStateOf(initialFrame) }
     var preservedOcrText by rememberSaveable { mutableStateOf<String?>(null) }
     var showEnlarged by remember { mutableStateOf(false) }
 
